@@ -1,0 +1,21 @@
+{
+  "name": "porsche-extractor",
+  "version": "1.0.0",
+  "description": "Outil d'extraction automatique des options du configurateur Porsche vers une base SQLite.",
+  "main": "porsche_extractor.js",
+  "scripts": {
+    "setup": "PLAYWRIGHT_BROWSERS_PATH=./browsers npx playwright install chromium",
+    "init": "node porsche_extractor_mysql.js --init",
+    "stats": "node porsche_extractor_mysql.js --stats",
+    "list": "node porsche_extractor_mysql.js --list"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "mysql2": "^3.15.3",
+    "playwright": "^1.57.0"
+  }
+}

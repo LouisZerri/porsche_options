@@ -1,0 +1,30 @@
+🚀 Lancement: cd '/var/www/html/porsche_extractor_interface/extractor' && /usr/bin/node porsche_extractor_mysql.js --model '9YBAI1' 2>&1
+
+╔══════════════════════════════════════════════════════════════╗
+║         PORSCHE OPTIONS EXTRACTOR v4.0 - MySQL               ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ Connecté à MySQL: localhost/porsche_options
+🚗 1 modèle(s) à extraire
+🔧 Mode: Invisible
+💾 Base: localhost/porsche_options
+
+[1/1]
+
+📦 Modèle: 9YBAI1
+   ✅ 156 options | Prix: 1 556,49 €
+
+═══════════════════════════════════════════════════════════════
+                      📊 RÉSUMÉ FINAL                          
+═══════════════════════════════════════════════════════════════
+
+   ✅ Modèles extraits: 1/1
+   📦 Options totales: 156
+   💾 Base: porsche_options
+
+   Commandes utiles:
+   --stats    Voir les statistiques
+   --export   Générer les fichiers CSV
+   --list     Lister les modèles en base
+═══════════════════════════════════════════════════════════════
+
