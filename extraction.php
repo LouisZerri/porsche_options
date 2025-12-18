@@ -58,74 +58,14 @@ $message = null;
 $messageType = null;
 
 // Actions POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isRunning) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
-    // Vider le log
-    @file_put_contents($logFile, '');
-    
-    // Vérifier que node existe
-    $nodePath = trim(shell_exec('which node 2>/dev/null') ?: '');
-    if (empty($nodePath)) {
-        $nodePath = '/usr/bin/node';
-    }
-    
-    if ($action === 'init_db') {
-        $cmd = sprintf('cd %s && %s porsche_extractor_mysql.js --init 2>&1', 
-            escapeshellarg($extractorDir), $nodePath);
-        $output = shell_exec($cmd);
-        file_put_contents($logFile, "Commande: $cmd\n\n" . $output);
-        $message = "Initialisation terminée";
+    // Actions toujours autorisées (même si extraction en cours)
+    if ($action === 'clear') {
+        file_put_contents($logFile, '');
+        $message = "Console vidée";
         $messageType = "success";
-        
-    } elseif ($action === 'extract_model' && !empty($_POST['model'])) {
-        $model = $_POST['model'];
-        // Mode SYNCHRONE pour voir le résultat directement
-        $cmd = sprintf('cd %s && %s porsche_extractor_mysql.js --model %s 2>&1',
-            escapeshellarg($extractorDir), $nodePath, escapeshellarg($model));
-        
-        file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
-        
-        // Exécuter et capturer la sortie
-        $output = shell_exec($cmd);
-        file_put_contents($logFile, $output, FILE_APPEND);
-        
-        $message = "Extraction terminée pour $model";
-        $messageType = "success";
-        
-    } elseif ($action === 'extract_model_async' && !empty($_POST['model'])) {
-        $model = $_POST['model'];
-        // Mode ASYNCHRONE (arrière-plan)
-        $cmd = sprintf('cd %s && %s porsche_extractor_mysql.js --model %s > %s 2>&1 & echo $!',
-            escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), escapeshellarg($logFile));
-        $pid = trim(shell_exec($cmd));
-        if ($pid && is_numeric($pid)) {
-            file_put_contents($lockFile, $pid);
-            $isRunning = true;
-            $message = "Extraction lancée en arrière-plan (PID: $pid)";
-            $messageType = "success";
-        } else {
-            file_put_contents($logFile, "Erreur lancement commande:\n$cmd\n\nPID retourné: $pid");
-            $message = "Erreur lors du lancement";
-            $messageType = "error";
-        }
-        
-    } elseif ($action === 'purge') {
-        try {
-            $db->exec("SET FOREIGN_KEY_CHECKS = 0");
-            $db->exec("TRUNCATE TABLE p_price_history");
-            $db->exec("TRUNCATE TABLE p_options");
-            $db->exec("TRUNCATE TABLE p_models");
-            $db->exec("TRUNCATE TABLE p_categories");
-            $db->exec("TRUNCATE TABLE p_families");
-            $db->exec("SET FOREIGN_KEY_CHECKS = 1");
-            file_put_contents($logFile, "🗑️ Toutes les données ont été supprimées.\n");
-            $message = "Données supprimées";
-            $messageType = "success";
-        } catch (Exception $e) {
-            $message = "Erreur: " . $e->getMessage();
-            $messageType = "error";
-        }
     } elseif ($action === 'stop') {
         if (file_exists($lockFile)) {
             $pid = trim(file_get_contents($lockFile));
@@ -136,28 +76,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isRunning) {
         $message = "Extraction arrêtée";
         $messageType = "warning";
         $isRunning = false;
+    } elseif (!$isRunning) {
+        // Actions seulement si pas d'extraction en cours
         
-    } elseif ($action === 'test') {
-        // Test de diagnostic
-        $output = "=== DIAGNOSTIC ===\n\n";
-        $output .= "📁 Dossier extracteur: $extractorDir\n";
-        $output .= "📄 Script existe: " . (file_exists($extractorDir . '/porsche_extractor_mysql.js') ? '✅ Oui' : '❌ Non') . "\n";
-        $output .= "📦 node_modules existe: " . (is_dir($extractorDir . '/node_modules') ? '✅ Oui' : '❌ Non (faire npm install)') . "\n";
-        $output .= "📦 browsers existe: " . (is_dir($extractorDir . '/browsers') ? '✅ Oui' : '❌ Non (faire npm run setup)') . "\n";
-        $output .= "🔧 Node.js path: $nodePath\n";
-        $output .= "🔧 Node.js version: " . trim(shell_exec("$nodePath --version 2>&1") ?: 'Non trouvé') . "\n";
-        $output .= "👤 Utilisateur PHP: " . trim(shell_exec('whoami') ?: 'inconnu') . "\n";
-        $output .= "\n=== TEST NODE ===\n\n";
-        $output .= shell_exec("cd $extractorDir && $nodePath -e \"console.log('Node.js fonctionne!')\" 2>&1") ?: "Erreur Node.js";
-        file_put_contents($logFile, $output);
-        $message = "Diagnostic effectué";
-        $messageType = "success";
+        // Vider le log au début des nouvelles actions
+        @file_put_contents($logFile, '');
         
-    } elseif ($action === 'clear') {
-        // Vider les logs
-        file_put_contents($logFile, '');
-        $message = "Console vidée";
-        $messageType = "success";
+        // Vérifier que node existe
+        $nodePath = trim(shell_exec('which node 2>/dev/null') ?: '');
+        if (empty($nodePath)) {
+            $nodePath = '/usr/bin/node';
+        }
+        
+        if ($action === 'init_db') {
+            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --init 2>&1', 
+                escapeshellarg($extractorDir), $nodePath);
+            $output = shell_exec($cmd);
+            file_put_contents($logFile, "Commande: $cmd\n\n" . $output);
+            $message = "Initialisation terminée";
+            $messageType = "success";
+            
+        } elseif ($action === 'extract_model' && !empty($_POST['model'])) {
+            $model = $_POST['model'];
+            // Mode SYNCHRONE pour voir le résultat directement
+            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --model %s 2>&1',
+                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model));
+            
+            file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
+            
+            // Exécuter et capturer la sortie
+            $output = shell_exec($cmd);
+            file_put_contents($logFile, $output, FILE_APPEND);
+            
+            $message = "Extraction terminée pour $model";
+            $messageType = "success";
+            
+        } elseif ($action === 'extract_model_async' && !empty($_POST['model'])) {
+            $model = $_POST['model'];
+            // Mode ASYNCHRONE (arrière-plan)
+            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --model %s > %s 2>&1 & echo $!',
+                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), escapeshellarg($logFile));
+            $pid = trim(shell_exec($cmd));
+            if ($pid && is_numeric($pid)) {
+                file_put_contents($lockFile, $pid);
+                $isRunning = true;
+                $message = "Extraction lancée en arrière-plan (PID: $pid)";
+                $messageType = "success";
+            } else {
+                file_put_contents($logFile, "Erreur lancement commande:\n$cmd\n\nPID retourné: $pid");
+                $message = "Erreur lors du lancement";
+                $messageType = "error";
+            }
+            
+        } elseif ($action === 'purge') {
+            try {
+                $db->exec("SET FOREIGN_KEY_CHECKS = 0");
+                $db->exec("TRUNCATE TABLE p_options");
+                $db->exec("TRUNCATE TABLE p_models");
+                $db->exec("TRUNCATE TABLE p_categories");
+                $db->exec("TRUNCATE TABLE p_families");
+                $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+                file_put_contents($logFile, "🗑️ Toutes les données ont été supprimées.\n");
+                $message = "Données supprimées";
+                $messageType = "success";
+            } catch (Exception $e) {
+                $message = "Erreur: " . $e->getMessage();
+                $messageType = "error";
+            }
+            
+        } elseif ($action === 'test') {
+            // Test de diagnostic
+            $output = "=== DIAGNOSTIC ===\n\n";
+            $output .= "📁 Dossier extracteur: $extractorDir\n";
+            $output .= "📄 Script existe: " . (file_exists($extractorDir . '/porsche_extractor_mysql.js') ? '✅ Oui' : '❌ Non') . "\n";
+            $output .= "📦 node_modules existe: " . (is_dir($extractorDir . '/node_modules') ? '✅ Oui' : '❌ Non (faire npm install)') . "\n";
+            $output .= "📦 browsers existe: " . (is_dir($extractorDir . '/browsers') ? '✅ Oui' : '❌ Non (faire npm run setup)') . "\n";
+            $output .= "🔧 Node.js path: $nodePath\n";
+            $output .= "🔧 Node.js version: " . trim(shell_exec("$nodePath --version 2>&1") ?: 'Non trouvé') . "\n";
+            $output .= "👤 Utilisateur PHP: " . trim(shell_exec('whoami') ?: 'inconnu') . "\n";
+            $output .= "\n=== TEST NODE ===\n\n";
+            $output .= shell_exec("cd $extractorDir && $nodePath -e \"console.log('Node.js fonctionne!')\" 2>&1") ?: "Erreur Node.js";
+            file_put_contents($logFile, $output);
+            $message = "Diagnostic effectué";
+            $messageType = "success";
+        }
     }
 }
 
@@ -312,9 +314,9 @@ try {
                     <p class="text-gray-400 text-xs mb-2">Commandes à exécuter :</p>
                     <div class="bg-black rounded p-2 font-mono text-xs text-green-400 space-y-1">
                         <p>cd extractor</p>
-                        <p>node porsche_extractor_mysql.js --init</p>
-                        <p>node porsche_extractor_mysql.js --model 982850</p>
-                        <p>node porsche_extractor_mysql.js --list</p>
+                        <p>node porsche_extractor_v5.js --init</p>
+                        <p>node porsche_extractor_v5.js --model 982850</p>
+                        <p>node porsche_extractor_v5.js --list</p>
                     </div>
                 </div>
 
