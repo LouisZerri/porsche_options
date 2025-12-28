@@ -119,41 +119,55 @@ $typeLabels = [
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            theme: { extend: { colors: { 'porsche-red': '#d5001c' } } }
+            theme: { 
+                extend: { 
+                    colors: { 
+                        'porsche-red': '#d5001c',
+                        'porsche-gray': '#f2f2f2',
+                        'porsche-border': '#e0e0e0'
+                    } 
+                } 
+            }
         }
     </script>
+    <style>
+        body { font-family: 'PorscheNext', 'Segoe UI', Arial, sans-serif; }
+    </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <header class="bg-black border-b border-gray-800 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+<body class="bg-white text-black min-h-screen">
+    <header class="bg-white border-b border-porsche-border sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 bg-porsche-red rounded-full flex items-center justify-center font-bold text-xl">P</div>
+                <svg class="w-10 h-10" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="48" fill="#d5001c"/>
+                    <text x="50" y="62" text-anchor="middle" fill="white" font-size="32" font-weight="bold">P</text>
+                </svg>
                 <div>
-                    <h1 class="text-xl font-bold">Porsche Options Manager</h1>
-                    <p class="text-gray-400 text-sm">v5.7 - Couleurs & Catégories</p>
+                    <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
+                    <p class="text-gray-500 text-sm">v5.8</p>
                 </div>
             </div>
-            <nav class="flex items-center gap-4">
-                <a href="index.php" class="text-gray-400 hover:text-white transition">Dashboard</a>
-                <a href="models.php" class="text-gray-400 hover:text-white transition">Modèles</a>
-                <a href="options.php" class="text-white font-bold">Options</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 px-4 py-2 rounded-lg transition">🚀 Extraction</a>
+            <nav class="flex items-center gap-6 text-sm">
+                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php" class="text-black font-medium">Options</a>
+                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">Extraction</a>
             </nav>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 py-8">
+    <main class="max-w-7xl mx-auto px-6 py-8">
         <h2 class="text-2xl font-bold mb-6">Options & Couleurs</h2>
 
         <!-- Filtres par type -->
         <?php if (!empty($stats)): ?>
         <div class="flex flex-wrap gap-2 mb-6">
-            <a href="options.php" class="px-4 py-2 rounded-lg <?= !$typeFilter ? 'bg-porsche-red' : 'bg-gray-700 hover:bg-gray-600' ?> transition">
+            <a href="options.php" class="px-4 py-2 rounded <?= !$typeFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
                 Tous
             </a>
             <?php foreach ($stats as $s): ?>
             <a href="?type=<?= urlencode($s['option_type']) ?>" 
-               class="px-4 py-2 rounded-lg <?= $typeFilter === $s['option_type'] ? 'bg-porsche-red' : 'bg-gray-700 hover:bg-gray-600' ?> transition">
+               class="px-4 py-2 rounded <?= $typeFilter === $s['option_type'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
                 <?= $typeLabels[$s['option_type']] ?? $s['option_type'] ?> 
                 <span class="text-gray-400">(<?= $s['count'] ?>)</span>
             </a>
@@ -169,94 +183,79 @@ $typeLabels = [
                 <?php endif; ?>
                 <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" 
                        placeholder="Code ou nom (ex: PSM, Bose, Blanc...)"
-                       class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-porsche-red">
-                <button type="submit" class="bg-porsche-red hover:bg-red-700 px-6 py-3 rounded-lg transition">
-                    🔍 Rechercher
+                       class="flex-1 border border-porsche-border rounded px-4 py-3 focus:outline-none focus:border-black focus:ring-1 focus:ring-black">
+                <button type="submit" class="bg-black hover:bg-gray-800 text-white px-6 py-3 rounded transition">
+                    Rechercher
                 </button>
             </div>
         </form>
 
         <?php if (!empty($options)): ?>
-            <p class="text-gray-400 mb-4"><?= count($options) ?> résultat(s)</p>
+            <p class="text-gray-500 mb-4"><?= count($options) ?> résultat(s)</p>
             
             <!-- Résultats groupés par catégorie -->
             <?php foreach ($optionsByCategory as $category => $categoryOptions): ?>
-            <div class="bg-gray-800 rounded-xl border border-gray-700 mb-4">
-                <div class="p-4 border-b border-gray-700 bg-gray-900/50">
-                    <h3 class="font-semibold"><?= htmlspecialchars($category) ?></h3>
-                    <span class="text-gray-400 text-sm"><?= count($categoryOptions) ?> éléments</span>
+            <div class="border border-porsche-border rounded-lg mb-4">
+                <div class="p-4 border-b border-porsche-border bg-porsche-gray">
+                    <h3 class="font-bold"><?= htmlspecialchars($category) ?></h3>
+                    <span class="text-gray-500 text-sm"><?= count($categoryOptions) ?> éléments</span>
                 </div>
-                <table class="w-full">
-                    <thead class="text-left text-xs text-gray-500 uppercase">
-                        <tr>
-                            <th class="px-4 py-2 w-20">Type</th>
-                            <th class="px-4 py-2 w-24">Code</th>
-                            <th class="px-4 py-2">Nom</th>
-                            <th class="px-4 py-2">Modèle</th>
-                            <th class="px-4 py-2 w-28 text-right">Prix</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($categoryOptions as $opt): ?>
-                        <tr class="border-t border-gray-700/50 hover:bg-gray-700/30">
-                            <td class="px-4 py-2">
-                                <?php
-                                $icons = ['color_ext' => '🎨', 'color_int' => '🛋️', 'wheel' => '🛞', 'seat' => '💺', 'pack' => '📦', 'option' => '⚙️'];
-                                echo $icons[$opt['option_type']] ?? '⚙️';
-                                ?>
-                            </td>
-                            <td class="px-4 py-2">
-                                <span class="font-mono text-sm bg-gray-700 px-2 py-1 rounded"><?= htmlspecialchars($opt['code']) ?></span>
-                            </td>
-                            <td class="px-4 py-2"><?= htmlspecialchars($opt['name']) ?></td>
-                            <td class="px-4 py-2">
-                                <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-blue-400 hover:underline">
-                                    <?= htmlspecialchars($opt['model_name']) ?>
-                                </a>
-                            </td>
-                            <td class="px-4 py-2 text-right">
-                                <?php if ($opt['is_standard']): ?>
-                                <span class="text-green-400">✓ Série</span>
-                                <?php else: ?>
-                                <?= $opt['price'] ? formatPrice($opt['price']) : '-' ?>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                <div>
+                    <?php $i = 0; foreach ($categoryOptions as $opt): ?>
+                    <div class="px-4 py-3 flex items-center hover:bg-gray-100 transition <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>">
+                        <span class="w-12 text-center">
+                            <?php
+                            $icons = ['color_ext' => '🎨', 'color_int' => '🛋️', 'wheel' => '🛞', 'seat' => '💺', 'pack' => '📦', 'option' => '⚙️'];
+                            echo $icons[$opt['option_type']] ?? '⚙️';
+                            ?>
+                        </span>
+                        <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"><?= htmlspecialchars($opt['code']) ?></span>
+                        <span class="flex-1"><?= htmlspecialchars($opt['name']) ?></span>
+                        <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6">
+                            <?= htmlspecialchars($opt['model_name']) ?>
+                        </a>
+                        <span class="w-24 text-right <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
+                            <?php if ($opt['is_standard']): ?>
+                            Série
+                            <?php else: ?>
+                            <?= $opt['price'] ? formatPrice($opt['price']) : '-' ?>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <?php $i++; endforeach; ?>
+                </div>
             </div>
             <?php endforeach; ?>
 
         <?php elseif ($search || $typeFilter): ?>
-            <div class="bg-gray-800 rounded-xl border border-gray-700 p-12 text-center">
+            <div class="border border-porsche-border rounded-lg p-12 text-center">
                 <p class="text-gray-500 text-lg">Aucun résultat</p>
             </div>
 
         <?php else: ?>
             <!-- Catégories disponibles -->
-            <div class="bg-gray-800 rounded-xl border border-gray-700">
-                <div class="p-4 border-b border-gray-700">
-                    <h3 class="font-semibold">Catégories disponibles</h3>
+            <div class="border border-porsche-border rounded-lg">
+                <div class="p-4 border-b border-porsche-border">
+                    <h3 class="font-bold">Catégories disponibles</h3>
                 </div>
                 <?php if (empty($categories)): ?>
                 <div class="p-8 text-center text-gray-500">
                     Aucune donnée. Lancez une extraction.
                 </div>
                 <?php else: ?>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-4">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
                     <?php 
                     $currentParent = null;
                     foreach ($categories as $cat): 
                         if ($cat['parent_name'] !== $currentParent):
                             $currentParent = $cat['parent_name'];
                     ?>
-                    <div class="col-span-full text-gray-500 text-sm mt-4 first:mt-0 border-b border-gray-700 pb-2">
+                    <div class="col-span-full text-gray-500 text-sm mt-4 first:mt-0 border-b border-porsche-border pb-2 font-medium">
                         <?= htmlspecialchars($currentParent ?: 'Autre') ?>
                     </div>
                     <?php endif; ?>
                     <a href="?cat=<?= urlencode($cat['name']) ?>" 
-                       class="bg-gray-700/50 hover:bg-gray-600 rounded-lg p-3 transition">
+                       class="border border-porsche-border hover:shadow-md hover:border-gray-400 rounded-lg p-3 transition">
                         <div class="font-medium"><?= htmlspecialchars($cat['name']) ?></div>
                         <div class="text-gray-400 text-sm"><?= $cat['count'] ?> options</div>
                     </a>
@@ -266,5 +265,6 @@ $typeLabels = [
             </div>
         <?php endif; ?>
     </main>
+
 </body>
 </html>

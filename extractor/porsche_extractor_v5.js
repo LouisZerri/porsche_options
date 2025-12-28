@@ -1,5 +1,7 @@
 /**
- * PORSCHE OPTIONS EXTRACTOR
+ * PORSCHE OPTIONS EXTRACTOR v5.7 - FINAL
+ * Extrait couleurs, jantes, options depuis les INPUT checkboxes et liens
+ * Gestion correcte des prix par catégorie
  */
 
 const mysql = require('mysql2/promise');
@@ -65,7 +67,7 @@ class PorscheDB {
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_families (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(50) UNIQUE NOT NULL, name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_models (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(20) UNIQUE NOT NULL, name VARCHAR(100) NOT NULL, family_id INT, base_price DECIMAL(10,2), year INT, options_count INT DEFAULT 0, colors_ext_count INT DEFAULT 0, colors_int_count INT DEFAULT 0, last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, FOREIGN KEY (family_id) REFERENCES p_families(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_categories (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL, parent_name VARCHAR(150), slug VARCHAR(150), UNIQUE KEY unique_cat (name, parent_name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-        await this.pool.query(`CREATE TABLE IF NOT EXISTS p_options (id INT AUTO_INCREMENT PRIMARY KEY, model_id INT NOT NULL, category_id INT, code VARCHAR(20) NOT NULL, name VARCHAR(255), price DECIMAL(10,2), is_standard BOOLEAN DEFAULT FALSE, option_type ENUM('option', 'color_ext', 'color_int', 'wheel', 'seat', 'pack') DEFAULT 'option', UNIQUE KEY unique_model_option (model_id, code), FOREIGN KEY (model_id) REFERENCES p_models(id) ON DELETE CASCADE, FOREIGN KEY (category_id) REFERENCES p_categories(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+        await this.pool.query(`CREATE TABLE IF NOT EXISTS p_options (id INT AUTO_INCREMENT PRIMARY KEY, model_id INT NOT NULL, category_id INT, code VARCHAR(20) NOT NULL, name VARCHAR(255), price DECIMAL(10,2), is_standard BOOLEAN DEFAULT FALSE, option_type ENUM('option', 'color_ext', 'color_int', 'wheel', 'seat', 'pack') DEFAULT 'option', image_url VARCHAR(500), UNIQUE KEY unique_model_option (model_id, code), FOREIGN KEY (model_id) REFERENCES p_models(id) ON DELETE CASCADE, FOREIGN KEY (category_id) REFERENCES p_categories(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         console.log('✅ Base de données réinitialisée avec succès !');
     }
     
@@ -96,7 +98,7 @@ class PorscheDB {
     
     async upsertOption(modelId, option) {
         const categoryId = await this.getOrCreateCategory(option.category, option.parentCategory);
-        await this.pool.query(`INSERT INTO p_options (model_id, category_id, code, name, price, is_standard, option_type) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), name = VALUES(name), price = VALUES(price), is_standard = VALUES(is_standard), option_type = VALUES(option_type)`, [modelId, categoryId, option.code, option.name, option.price, option.isStandard ? 1 : 0, option.type || 'option']);
+        await this.pool.query(`INSERT INTO p_options (model_id, category_id, code, name, price, is_standard, option_type, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), name = VALUES(name), price = VALUES(price), is_standard = VALUES(is_standard), option_type = VALUES(option_type), image_url = COALESCE(VALUES(image_url), image_url)`, [modelId, categoryId, option.code, option.name, option.price, option.isStandard ? 1 : 0, option.type || 'option', option.imageUrl || null]);
     }
     
     async updateCounts(modelId) {
@@ -278,6 +280,92 @@ class PorscheExtractor {
                     return null;
                 }
                 
+                // Fonction pour trouver l'URL de l'image associée à un élément
+                function findImageUrl(element, type, code) {
+                    // Chercher dans les parents proches
+                    let el = element;
+                    for (let i = 0; i < 8 && el; i++) {
+                        // Chercher toutes les images dans ce conteneur
+                        const allImgs = el.querySelectorAll('img');
+                        for (const img of allImgs) {
+                            // Essayer src, data-src, data-lazy-src
+                            let src = img.src || '';
+                            if (!src || src.includes('data:')) {
+                                src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+                            }
+                            
+                            if (src && !src.includes('data:') && !src.includes('icon') && !src.includes('svg')) {
+                                return src;
+                            }
+                        }
+                        
+                        // Chercher les picture/source srcset
+                        const sources = el.querySelectorAll('picture source, source');
+                        for (const source of sources) {
+                            const srcset = source.getAttribute('srcset') || '';
+                            if (srcset) {
+                                const firstSrc = srcset.split(',')[0]?.trim()?.split(' ')[0];
+                                if (firstSrc && !firstSrc.includes('data:')) {
+                                    return firstSrc;
+                                }
+                            }
+                        }
+                        
+                        // Chercher background-image
+                        const allElements = el.querySelectorAll('*');
+                        for (const child of allElements) {
+                            const style = window.getComputedStyle(child);
+                            const bgImage = style.backgroundImage;
+                            if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
+                                const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+                                if (urlMatch && urlMatch[1] && !urlMatch[1].includes('data:') && !urlMatch[1].includes('icon')) {
+                                    return urlMatch[1];
+                                }
+                            }
+                        }
+                        
+                        // Chercher attributs data-image
+                        const withDataImg = el.querySelectorAll('[data-image], [data-src], [data-background]');
+                        for (const elem of withDataImg) {
+                            const dataImg = elem.getAttribute('data-image') || elem.getAttribute('data-src') || elem.getAttribute('data-background') || '';
+                            if (dataImg && !dataImg.includes('data:')) {
+                                return dataImg;
+                            }
+                        }
+                        
+                        el = el.parentElement;
+                    }
+                    
+                    // Chercher dans les siblings
+                    const parent = element.parentElement;
+                    if (parent) {
+                        const siblings = parent.querySelectorAll('img');
+                        for (const img of siblings) {
+                            const src = img.src || img.getAttribute('data-src') || '';
+                            if (src && !src.includes('data:') && !src.includes('icon')) {
+                                return src;
+                            }
+                        }
+                    }
+                    
+                    // Chercher label associé
+                    const inputId = element.getAttribute('id');
+                    if (inputId) {
+                        const label = document.querySelector(`label[for="${inputId}"]`);
+                        if (label) {
+                            const labelImg = label.querySelector('img');
+                            if (labelImg) {
+                                const src = labelImg.src || labelImg.getAttribute('data-src') || '';
+                                if (src && !src.includes('data:')) {
+                                    return src;
+                                }
+                            }
+                        }
+                    }
+                    
+                    return null;
+                }
+                
                 // Extraire les couleurs depuis les inputs
                 const colorInputs = document.querySelectorAll('input[name="options"]');
                 
@@ -366,6 +454,12 @@ class PorscheExtractor {
                         price = 0;
                     }
                     
+                    // Capturer l'URL de l'image (seulement pour couleurs et sièges)
+                    let imageUrl = null;
+                    if (type === 'color_ext' || type === 'color_int' || type === 'seat') {
+                        imageUrl = findImageUrl(input, type, code);
+                    }
+                    
                     results.push({
                         code,
                         name,
@@ -373,7 +467,8 @@ class PorscheExtractor {
                         isStandard,
                         type,
                         category: parentH3 || parentH2 || 'Couleurs',
-                        parentCategory: parentH2 || 'Couleurs'
+                        parentCategory: parentH2 || 'Couleurs',
+                        imageUrl
                     });
                 });
                 
@@ -452,6 +547,12 @@ class PorscheExtractor {
                     const containerText = container?.innerText || '';
                     const isStandard = containerText.toLowerCase().includes('série') || price === 0;
                     
+                    // Capturer l'URL de l'image (seulement pour couleurs et sièges)
+                    let imageUrl = null;
+                    if (type === 'color_ext' || type === 'color_int' || type === 'seat') {
+                        imageUrl = findImageUrl(link, type, code);
+                    }
+                    
                     results.push({
                         code,
                         name: name.substring(0, 250),
@@ -459,7 +560,8 @@ class PorscheExtractor {
                         isStandard,
                         type,
                         category: parentH3 || parentH2 || 'Autre',
-                        parentCategory: parentH2 || 'Autre'
+                        parentCategory: parentH2 || 'Autre',
+                        imageUrl
                     });
                 });
                 
@@ -468,7 +570,11 @@ class PorscheExtractor {
             
             // Stats
             const byType = {};
-            allOptions.forEach(o => { byType[o.type] = (byType[o.type] || 0) + 1; });
+            let imagesFound = 0;
+            allOptions.forEach(o => { 
+                byType[o.type] = (byType[o.type] || 0) + 1;
+                if (o.imageUrl) imagesFound++;
+            });
             
             console.log(`\n📊 ${allOptions.length} éléments extraits`);
             console.log(`   🎨 Couleurs ext: ${byType['color_ext'] || 0}`);
@@ -477,6 +583,7 @@ class PorscheExtractor {
             console.log(`   💺 Sièges: ${byType['seat'] || 0}`);
             console.log(`   📦 Packs: ${byType['pack'] || 0}`);
             console.log(`   ⚙️ Options: ${byType['option'] || 0}`);
+            console.log(`   🖼️ Images: ${imagesFound}`);
             
             // Lister les couleurs
             const colors = allOptions.filter(o => o.type === 'color_ext' || o.type === 'color_int');
@@ -532,7 +639,7 @@ async function main() {
         if (args.includes('--init')) {
             await db.connect(true);  // Connexion sans sélectionner de base
             await db.initSchema();
-            await db.close();
+            try { await db.close(); } catch(e) {}
             return;
         }
         
@@ -548,7 +655,6 @@ async function main() {
             console.log(`   Options: ${options}`);
             console.log('\n   Par type:');
             byType.forEach(t => console.log(`      ${t.option_type}: ${t.count}`));
-            await db.close();
             return;
         }
         
@@ -556,7 +662,6 @@ async function main() {
             const [models] = await db.pool.query(`SELECT m.code, m.name, f.name as family, m.options_count, m.colors_ext_count, m.colors_int_count FROM p_models m LEFT JOIN p_families f ON m.family_id = f.id ORDER BY f.name, m.name`);
             console.log(`📋 ${models.length} modèles:\n`);
             models.forEach(m => console.log(`   ${m.code.padEnd(10)} ${m.name.substring(0, 25).padEnd(25)} ${String(m.options_count).padStart(3)} opt | ${String(m.colors_ext_count).padStart(2)} ext | ${String(m.colors_int_count).padStart(2)} int`));
-            await db.close();
             return;
         }
         
@@ -568,7 +673,6 @@ async function main() {
             console.log('  node porsche_extractor_v5.js --model 982890 --visible');
             console.log('  node porsche_extractor_v5.js --stats');
             console.log('  node porsche_extractor_v5.js --list\n');
-            await db.close();
             return;
         }
         
@@ -596,7 +700,7 @@ async function main() {
     } catch (error) {
         console.error('❌ Erreur:', error.message);
     } finally {
-        await db.close();
+        try { await db.close(); } catch(e) {}
     }
 }
 
