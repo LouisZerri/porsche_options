@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Test de diagnostic
             $output = "=== DIAGNOSTIC ===\n\n";
             $output .= "📁 Dossier extracteur: $extractorDir\n";
-            $output .= "📄 Script existe: " . (file_exists($extractorDir . '/porsche_extractor_mysql.js') ? '✅ Oui' : '❌ Non') . "\n";
+            $output .= "📄 Script v5 existe: " . (file_exists($extractorDir . '/porsche_extractor_v5.js') ? '✅ Oui' : '❌ Non') . "\n";
             $output .= "📦 node_modules existe: " . (is_dir($extractorDir . '/node_modules') ? '✅ Oui' : '❌ Non (faire npm install)') . "\n";
             $output .= "📦 browsers existe: " . (is_dir($extractorDir . '/browsers') ? '✅ Oui' : '❌ Non (faire npm run setup)') . "\n";
             $output .= "🔧 Node.js path: $nodePath\n";
@@ -331,6 +331,8 @@ try {
                         <p>cd extractor</p>
                         <p>node porsche_extractor_v5.js --init</p>
                         <p>node porsche_extractor_v5.js --model 982850</p>
+                        <p class="text-gray-500"># Avec debug images:</p>
+                        <p>node porsche_extractor_v5.js --model 982850 --debug-img</p>
                         <p>node porsche_extractor_v5.js --list</p>
                     </div>
                 </div>
@@ -373,7 +375,7 @@ try {
     </main>
 
     <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v5.8
+        Porsche Options Manager v5.8 - Image Mapping
     </footer>
 
     <script>
@@ -436,4 +438,4 @@ try {
         fetchStats();
     </script>
 </body>
-</html> 
+</html>

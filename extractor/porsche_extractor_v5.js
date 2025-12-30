@@ -1,5 +1,5 @@
 /**
- * PORSCHE OPTIONS EXTRACTOR v5.7 - FINAL
+ * PORSCHE OPTIONS EXTRACTOR v5.10 - COLOR BANDS + LIGHTBOX
  * Extrait couleurs, jantes, options depuis les INPUT checkboxes et liens
  * Gestion correcte des prix par catégorie
  */
@@ -136,16 +136,26 @@ class PorscheExtractor {
         return 'Autre';
     }
     
-    async extractModel(modelCode) {
+    async extractModel(modelCode, debugImages = false) {
         // Essayer 2026 d'abord, puis 2025 si ça échoue
         const years = ['2026', '2025', '2024'];
         let url = `${CONFIG.baseUrl}/${CONFIG.locale}/mode/model/${years[0]}/${modelCode}`;
         
         console.log(`\n${'═'.repeat(70)}`);
-        console.log(`📦 EXTRACTION: ${modelCode}`);
+        console.log(`📦 EXTRACTION: ${modelCode}${debugImages ? ' (DEBUG IMAGES)' : ''}`);
         console.log(`${'═'.repeat(70)}`);
         
         const page = await this.context.newPage();
+        
+        // Capturer les logs de debug pour les couleurs intérieures
+        if (debugImages) {
+            page.on('console', msg => {
+                const text = msg.text();
+                if (text.includes('[DEBUG')) {
+                    console.log(`   🔍 ${text}`);
+                }
+            });
+        }
         
         try {
             console.log('\n⏳ Chargement...');
@@ -231,12 +241,154 @@ class PorscheExtractor {
             await page.waitForTimeout(3000);
             
             // ═══════════════════════════════════════════════════════════════
-            // EXTRACTION COMPLÈTE
+            // SCAN DE TOUTES LES IMAGES + CRÉATION MAPPING
             // ═══════════════════════════════════════════════════════════════
             
-            const allOptions = await page.evaluate(() => {
+            console.log('\n🔍 Scan de toutes les images de la page...');
+            
+            const imageAnalysis = await page.evaluate(() => {
+                const allImages = [];
+                const imageMap = {}; // code -> url
+                
+                // 1. Scanner TOUTES les balises <img>
+                document.querySelectorAll('img').forEach((img) => {
+                    let src = img.src || '';
+                    if (!src || src.includes('data:image')) {
+                        src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+                    }
+                    
+                    if (!src || src.includes('data:') || src.includes('porsche-design-system') || src.includes('.svg')) return;
+                    
+                    // Extraire le code depuis l'URL
+                    // Patterns: studio_0Q.jpg, studio_421.jpg, detail_M04I_m_0.jpg, studio_P11.jpg, interiors/41.jpg
+                    const patterns = [
+                        /studio_([A-Z0-9]+)\./i,      // studio_0Q.jpg
+                        /detail_M?([A-Z0-9]+)_/i,     // detail_M04I_m_0.jpg ou detail_04I_
+                        /\/([A-Z0-9]{2,5})\.jpg/i,    // /0Q.jpg
+                        /exteriors\/studio_([A-Z0-9]+)/i,  // exteriors/studio_0Q
+                        /seats\/[^\/]+\/studio_([A-Z0-9]+)/i, // seats/982/studio_P11
+                        /interiors?\/([A-Z0-9]+)/i,   // interior/41 ou interiors/41
+                        /interior[_-]?([A-Z0-9]{2})/i, // interior_41 ou interior-41
+                        /color[_-]?int[_-]?([A-Z0-9]{2})/i, // color_int_41
+                    ];
+                    
+                    let extractedCode = null;
+                    for (const pattern of patterns) {
+                        const match = src.match(pattern);
+                        if (match && match[1]) {
+                            extractedCode = match[1].toUpperCase();
+                            break;
+                        }
+                    }
+                    
+                    // Alt text contient souvent le nom
+                    const alt = img.alt || '';
+                    
+                    // Chercher les codes dans le contexte proche
+                    let contextCodes = [];
+                    let el = img.parentElement;
+                    for (let i = 0; i < 5 && el; i++) {
+                        const text = el.innerText || '';
+                        const matches = text.match(/\b([A-Z0-9]{2,5})\b/g);
+                        if (matches) {
+                            contextCodes = matches.filter(m => m.length >= 2 && m.length <= 5);
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                    
+                    // Si on a trouvé un code dans l'URL, ajouter au mapping
+                    if (extractedCode && !imageMap[extractedCode]) {
+                        imageMap[extractedCode] = src;
+                    }
+                    
+                    // Ajouter aussi via les codes du contexte
+                    contextCodes.forEach(code => {
+                        if (!imageMap[code] && src.includes('/assets/')) {
+                            imageMap[code] = src;
+                        }
+                    });
+                    
+                    allImages.push({
+                        src: src,
+                        alt: alt.substring(0, 60),
+                        extractedCode: extractedCode,
+                        contextCodes: contextCodes.slice(0, 3),
+                        width: img.width,
+                        height: img.height
+                    });
+                });
+                
+                // 2. Scanner les background-images
+                document.querySelectorAll('[style*="background"]').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    const bgImage = style.backgroundImage;
+                    if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
+                        const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+                        if (urlMatch && urlMatch[1] && !urlMatch[1].includes('data:') && !urlMatch[1].includes('.svg')) {
+                            const src = urlMatch[1];
+                            
+                            // Extraire code
+                            const match = src.match(/studio_([A-Z0-9]+)\./i) || src.match(/detail_M?([A-Z0-9]+)_/i);
+                            if (match && match[1]) {
+                                const code = match[1].toUpperCase();
+                                if (!imageMap[code]) {
+                                    imageMap[code] = src;
+                                }
+                            }
+                            
+                            allImages.push({
+                                src: src,
+                                type: 'background',
+                                extractedCode: match ? match[1] : null
+                            });
+                        }
+                    }
+                });
+                
+                return { allImages, imageMap };
+            });
+            
+            const { allImages, imageMap } = imageAnalysis;
+            
+            console.log(`\n📸 ${allImages.length} images trouvées sur la page`);
+            console.log(`📋 ${Object.keys(imageMap).length} codes mappés automatiquement\n`);
+            
+            if (debugImages) {
+                console.log('═'.repeat(70));
+                console.log('🖼️  TOUTES LES IMAGES TROUVÉES');
+                console.log('═'.repeat(70));
+                
+                allImages.forEach((img, idx) => {
+                    console.log(`\n[${idx + 1}] ${img.src}`);
+                    if (img.alt) console.log(`    ALT: ${img.alt}`);
+                    if (img.extractedCode) console.log(`    CODE EXTRAIT: ${img.extractedCode}`);
+                    if (img.contextCodes?.length) console.log(`    CODES CONTEXTE: ${img.contextCodes.join(', ')}`);
+                    if (img.width) console.log(`    SIZE: ${img.width}x${img.height}`);
+                    if (img.type === 'background') console.log(`    TYPE: background-image`);
+                });
+                
+                console.log('\n' + '═'.repeat(70));
+                console.log('🗺️  MAPPING CODE -> IMAGE');
+                console.log('═'.repeat(70) + '\n');
+                
+                Object.entries(imageMap).forEach(([code, url]) => {
+                    console.log(`   ${code.padEnd(6)} → ${url.substring(0, 80)}...`);
+                });
+                
+                console.log('\n' + '═'.repeat(70));
+            }
+            
+            // ═══════════════════════════════════════════════════════════════
+            // EXTRACTION COMPLÈTE (avec le mapping d'images)
+            // ═══════════════════════════════════════════════════════════════
+            
+            const allOptions = await page.evaluate((imageMapFromOutside) => {
                 const results = [];
                 const seen = new Set();
+                
+                // Récupérer le mapping d'images passé depuis l'extérieur
+                const imageMap = imageMapFromOutside || {};
                 
                 // ─────────────────────────────────────────────────────────────
                 // 1. EXTRAIRE LES COULEURS DEPUIS LES INPUT CHECKBOXES
@@ -281,10 +433,134 @@ class PorscheExtractor {
                 }
                 
                 // Fonction pour trouver l'URL de l'image associée à un élément
-                function findImageUrl(element, type, code) {
-                    // Chercher dans les parents proches
+                function findImageUrl(element, type, code, optionName = '') {
+                    // STRATÉGIE SPÉCIALE pour les couleurs intérieures
+                    // Porsche utilise des linear-gradient CSS mais souvent juste noir
+                    // On parse le nom pour extraire les vraies couleurs
+                    if (type === 'color_int') {
+                        console.log(`[DEBUG color_int] code=${code} optionName="${optionName}"`);
+                        
+                        // Mapping des noms de couleurs Porsche vers hex
+                        const colorNameToHex = {
+                            'noir': '#1a1a1a',
+                            'black': '#1a1a1a',
+                            'gris arctique': '#8C9DA8',
+                            'arctic grey': '#8C9DA8',
+                            'bleu abysse': '#1E3A5F',
+                            'abyss blue': '#1E3A5F',
+                            'bordeaux': '#722F37',
+                            'rouge': '#8B0000',
+                            'red': '#8B0000',
+                            'beige': '#C8B896',
+                            'craie': '#E8E4D9',
+                            'chalk': '#E8E4D9',
+                            'havane': '#8B4513',
+                            'havanna': '#8B4513',
+                            'espresso': '#3C2415',
+                            'cognac': '#9A463D',
+                            'graphite': '#4A4A4A',
+                            'gris': '#808080',
+                            'grey': '#808080',
+                            'bleu': '#2B4B6F',
+                            'blue': '#2B4B6F',
+                            'vert': '#2D5A3D',
+                            'green': '#2D5A3D',
+                        };
+                        
+                        // Chercher les couleurs dans le nom de l'option
+                        const nameLower = (optionName || '').toLowerCase();
+                        const foundColors = [];
+                        const foundNames = [];
+                        
+                        // D'abord chercher les combinaisons spécifiques (ordre important: plus long d'abord)
+                        const sortedColorNames = Object.keys(colorNameToHex).sort((a, b) => b.length - a.length);
+                        for (const colorName of sortedColorNames) {
+                            if (nameLower.includes(colorName)) {
+                                // Éviter les doublons: si "gris arctique" est trouvé, ne pas ajouter "gris"
+                                const isSubMatch = foundNames.some(found => found.includes(colorName) || colorName.includes(found));
+                                if (!isSubMatch) {
+                                    foundColors.push(colorNameToHex[colorName]);
+                                    foundNames.push(colorName);
+                                    console.log(`[DEBUG color_int] Found "${colorName}" -> ${colorNameToHex[colorName]}`);
+                                }
+                            }
+                        }
+                        
+                        // Dédupliquer
+                        const uniqueColors = [...new Set(foundColors)];
+                        console.log(`[DEBUG color_int] uniqueColors from name: ${JSON.stringify(uniqueColors)}`);
+                        
+                        if (uniqueColors.length >= 2) {
+                            console.log(`[DEBUG color_int] ✓ Parsed ${uniqueColors.length} colors from name: ${uniqueColors.join(', ')}`);
+                            return `colors:${uniqueColors.join(',')}`;
+                        }
+                        
+                        // Si on a au moins une couleur du nom, ajouter noir comme base
+                        if (uniqueColors.length === 1) {
+                            const result = ['#1a1a1a', uniqueColors[0]];
+                            console.log(`[DEBUG color_int] ✓ Single color + black: ${result.join(', ')}`);
+                            return `colors:${result.join(',')}`;
+                        }
+                        
+                        // Fallback: gradient inline
+                        const inlineStyle = element.getAttribute('style') || '';
+                        if (inlineStyle.includes('linear-gradient')) {
+                            const hexColors = inlineStyle.match(/#[0-9a-fA-F]{6}/g) || [];
+                            const uniqueGradientColors = [...new Set(hexColors)];
+                            if (uniqueGradientColors.length > 0) {
+                                console.log(`[DEBUG color_int] Fallback to gradient: ${uniqueGradientColors.join(', ')}`);
+                                return `colors:${uniqueGradientColors.join(',')}`;
+                            }
+                        }
+                        
+                        console.log(`[DEBUG color_int] ✗ No colors found for ${code}`);
+                    }
+                    
+                    // STRATÉGIE 0: Utiliser le mapping pré-calculé avec variantes de préfixes
+                    // Porsche utilise des préfixes différents : 
+                    //   - P74 dans l'URL mais PP74 dans l'image (ajout de P)
+                    //   - AME dans l'URL mais CAME dans l'image (ajout de C)
+                    //   - DHH dans l'URL mais QDHH dans l'image (ajout de Q)
+                    
+                    // 1. Correspondance exacte
+                    if (imageMap[code]) {
+                        return imageMap[code];
+                    }
+                    
+                    // 2. Essayer d'AJOUTER des préfixes au code
+                    const prefixes = ['P', 'C', 'M', 'Q', 'X', 'PP', 'CC', 'MM'];
+                    for (const prefix of prefixes) {
+                        const testCode = prefix + code;
+                        if (imageMap[testCode]) {
+                            return imageMap[testCode];
+                        }
+                    }
+                    
+                    // 3. Essayer de RETIRER des préfixes du code (si le code commence par ces lettres)
+                    const prefixesToStrip = ['P', 'C', 'M', 'Q', 'X'];
+                    for (const prefix of prefixesToStrip) {
+                        if (code.startsWith(prefix) && code.length > 2) {
+                            const strippedCode = code.substring(1);
+                            if (imageMap[strippedCode]) {
+                                return imageMap[strippedCode];
+                            }
+                        }
+                    }
+                    
+                    // 4. Chercher les codes qui CONTIENNENT notre code (ex: QDHH contient DHH)
+                    for (const [mapCode, mapUrl] of Object.entries(imageMap)) {
+                        if (mapCode.endsWith(code) && mapCode.length <= code.length + 2) {
+                            return mapUrl;
+                        }
+                        // Notre code se termine par le mapCode (ex: code=QDHH, mapCode=DHH)
+                        if (code.endsWith(mapCode) && code.length <= mapCode.length + 2) {
+                            return mapUrl;
+                        }
+                    }
+                    
+                    // STRATÉGIE 1: Chercher dans les parents proches
                     let el = element;
-                    for (let i = 0; i < 8 && el; i++) {
+                    for (let i = 0; i < 10 && el; i++) {
                         // Chercher toutes les images dans ce conteneur
                         const allImgs = el.querySelectorAll('img');
                         for (const img of allImgs) {
@@ -294,8 +570,17 @@ class PorscheExtractor {
                                 src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
                             }
                             
-                            if (src && !src.includes('data:') && !src.includes('icon') && !src.includes('svg')) {
-                                return src;
+                            if (src && !src.includes('data:') && !src.includes('icon') && !src.includes('.svg') && 
+                                !src.includes('porsche-design-system')) {
+                                // Priorité aux images qui contiennent le code
+                                if (src.includes(code) || src.includes(`studio_${code}`) || src.includes(`_${code}`)) {
+                                    return src;
+                                }
+                                // Sinon prendre la première image valide (couleurs/sièges/jantes/packs)
+                                if ((type === 'color_ext' || type === 'color_int' || type === 'seat' || type === 'wheel' || type === 'pack') &&
+                                    (src.includes('/assets/') || src.includes('/model/') || src.includes('pictures.porsche.com'))) {
+                                    return src;
+                                }
                             }
                         }
                         
@@ -305,7 +590,8 @@ class PorscheExtractor {
                             const srcset = source.getAttribute('srcset') || '';
                             if (srcset) {
                                 const firstSrc = srcset.split(',')[0]?.trim()?.split(' ')[0];
-                                if (firstSrc && !firstSrc.includes('data:')) {
+                                if (firstSrc && !firstSrc.includes('data:') && 
+                                    (firstSrc.includes('/assets/') || firstSrc.includes('/model/'))) {
                                     return firstSrc;
                                 }
                             }
@@ -319,7 +605,9 @@ class PorscheExtractor {
                             if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
                                 const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
                                 if (urlMatch && urlMatch[1] && !urlMatch[1].includes('data:') && !urlMatch[1].includes('icon')) {
-                                    return urlMatch[1];
+                                    if (urlMatch[1].includes('/assets/') || urlMatch[1].includes('/model/')) {
+                                        return urlMatch[1];
+                                    }
                                 }
                             }
                         }
@@ -336,19 +624,21 @@ class PorscheExtractor {
                         el = el.parentElement;
                     }
                     
-                    // Chercher dans les siblings
+                    // STRATÉGIE 2: Chercher dans les siblings
                     const parent = element.parentElement;
                     if (parent) {
                         const siblings = parent.querySelectorAll('img');
                         for (const img of siblings) {
                             const src = img.src || img.getAttribute('data-src') || '';
-                            if (src && !src.includes('data:') && !src.includes('icon')) {
-                                return src;
+                            if (src && !src.includes('data:') && !src.includes('icon') && !src.includes('.svg')) {
+                                if (src.includes('/assets/') || src.includes('/model/')) {
+                                    return src;
+                                }
                             }
                         }
                     }
                     
-                    // Chercher label associé
+                    // STRATÉGIE 3: Chercher le label associé
                     const inputId = element.getAttribute('id');
                     if (inputId) {
                         const label = document.querySelector(`label[for="${inputId}"]`);
@@ -360,6 +650,15 @@ class PorscheExtractor {
                                     return src;
                                 }
                             }
+                        }
+                    }
+                    
+                    // STRATÉGIE 4: Chercher dans TOUTE la page une image qui contient le code
+                    const allPageImgs = document.querySelectorAll('img');
+                    for (const img of allPageImgs) {
+                        const src = img.src || img.getAttribute('data-src') || '';
+                        if (src && (src.includes(`_${code}`) || src.includes(`/${code}.`) || src.includes(`studio_${code}`))) {
+                            return src;
                         }
                     }
                     
@@ -454,11 +753,8 @@ class PorscheExtractor {
                         price = 0;
                     }
                     
-                    // Capturer l'URL de l'image (seulement pour couleurs et sièges)
-                    let imageUrl = null;
-                    if (type === 'color_ext' || type === 'color_int' || type === 'seat') {
-                        imageUrl = findImageUrl(input, type, code);
-                    }
+                    // Capturer l'URL de l'image pour couleurs, sièges ET jantes
+                    let imageUrl = findImageUrl(input, type, code, name);
                     
                     results.push({
                         code,
@@ -547,11 +843,8 @@ class PorscheExtractor {
                     const containerText = container?.innerText || '';
                     const isStandard = containerText.toLowerCase().includes('série') || price === 0;
                     
-                    // Capturer l'URL de l'image (seulement pour couleurs et sièges)
-                    let imageUrl = null;
-                    if (type === 'color_ext' || type === 'color_int' || type === 'seat') {
-                        imageUrl = findImageUrl(link, type, code);
-                    }
+                    // Capturer l'URL de l'image pour TOUS les types
+                    let imageUrl = findImageUrl(link, type, code, name);
                     
                     results.push({
                         code,
@@ -566,7 +859,7 @@ class PorscheExtractor {
                 });
                 
                 return results;
-            });
+            }, imageMap);
             
             // Stats
             const byType = {};
@@ -585,12 +878,49 @@ class PorscheExtractor {
             console.log(`   ⚙️ Options: ${byType['option'] || 0}`);
             console.log(`   🖼️ Images: ${imagesFound}`);
             
+            // En mode debug, afficher les options avec/sans images
+            if (debugImages) {
+                console.log('\n' + '═'.repeat(70));
+                console.log('🖼️ DÉTAIL DES IMAGES PAR OPTION');
+                console.log('═'.repeat(70));
+                
+                const withImages = allOptions.filter(o => o.imageUrl);
+                const withoutImages = allOptions.filter(o => !o.imageUrl);
+                
+                console.log(`\n✅ AVEC IMAGE (${withImages.length}):`);
+                console.log('─'.repeat(50));
+                withImages.forEach(o => {
+                    console.log(`   [${o.code}] ${o.type.padEnd(10)} ${o.name.substring(0, 40)}`);
+                    console.log(`       → ${o.imageUrl.substring(0, 80)}...`);
+                });
+                
+                console.log(`\n❌ SANS IMAGE (${withoutImages.length}):`);
+                console.log('─'.repeat(50));
+                
+                // Grouper par type
+                const byTypeNoImg = {};
+                withoutImages.forEach(o => {
+                    if (!byTypeNoImg[o.type]) byTypeNoImg[o.type] = [];
+                    byTypeNoImg[o.type].push(o);
+                });
+                
+                Object.entries(byTypeNoImg).forEach(([type, opts]) => {
+                    console.log(`\n   ${type.toUpperCase()} (${opts.length}):`);
+                    opts.forEach(o => {
+                        console.log(`      [${o.code}] ${o.name.substring(0, 50)}`);
+                    });
+                });
+                
+                console.log('\n' + '═'.repeat(70));
+            }
+            
             // Lister les couleurs
             const colors = allOptions.filter(o => o.type === 'color_ext' || o.type === 'color_int');
             console.log(`\n🎨 COULEURS EXTRAITES (${colors.length}):`);
             colors.forEach(c => {
                 const priceStr = c.isStandard ? '✓ Série' : `${c.price?.toLocaleString('fr-FR') || '?'} €`;
-                console.log(`   [${c.code}] ${c.type === 'color_ext' ? 'EXT' : 'INT'} - ${c.name} - ${priceStr}`);
+                const imgIcon = c.imageUrl ? '🖼️' : '❌';
+                console.log(`   ${imgIcon} [${c.code}] ${c.type === 'color_ext' ? 'EXT' : 'INT'} - ${c.name} - ${priceStr}`);
             });
             
             // Lister les jantes
@@ -598,8 +928,31 @@ class PorscheExtractor {
             console.log(`\n🛞 JANTES EXTRAITES (${wheels.length}):`);
             wheels.forEach(w => {
                 const priceStr = w.isStandard ? '✓ Série' : `${w.price?.toLocaleString('fr-FR') || '?'} €`;
-                console.log(`   [${w.code}] ${w.name.substring(0, 50)} - ${priceStr}`);
+                const imgIcon = w.imageUrl ? '🖼️' : '❌';
+                console.log(`   ${imgIcon} [${w.code}] ${w.name.substring(0, 50)} - ${priceStr}`);
             });
+            
+            // Lister les packs
+            const packs = allOptions.filter(o => o.type === 'pack');
+            if (packs.length > 0) {
+                console.log(`\n📦 PACKS EXTRAITS (${packs.length}):`);
+                packs.forEach(p => {
+                    const priceStr = p.isStandard ? '✓ Série' : `${p.price?.toLocaleString('fr-FR') || '?'} €`;
+                    const imgIcon = p.imageUrl ? '🖼️' : '❌';
+                    console.log(`   ${imgIcon} [${p.code}] ${p.name.substring(0, 50)} - ${priceStr}`);
+                });
+            }
+            
+            // Lister les sièges
+            const seats = allOptions.filter(o => o.type === 'seat');
+            if (seats.length > 0) {
+                console.log(`\n💺 SIÈGES EXTRAITS (${seats.length}):`);
+                seats.forEach(s => {
+                    const priceStr = s.isStandard ? '✓ Série' : `${s.price?.toLocaleString('fr-FR') || '?'} €`;
+                    const imgIcon = s.imageUrl ? '🖼️' : '❌';
+                    console.log(`   ${imgIcon} [${s.code}] ${s.name.substring(0, 50)} - ${priceStr}`);
+                });
+            }
             
             // Sauvegarder
             console.log('\n💾 Sauvegarde...');
@@ -609,7 +962,7 @@ class PorscheExtractor {
             await this.db.updateCounts(modelId);
             
             console.log(`\n${'═'.repeat(70)}`);
-            console.log(`✅ TERMINÉ: ${allOptions.length} éléments | ${byType['color_ext'] || 0} couleurs ext | ${byType['color_int'] || 0} couleurs int`);
+            console.log(`✅ TERMINÉ: ${allOptions.length} éléments | ${byType['color_ext'] || 0} couleurs ext | ${byType['color_int'] || 0} couleurs int | 🖼️ ${imagesFound} images`);
             console.log(`${'═'.repeat(70)}`);
             
             return allOptions.length;
@@ -630,7 +983,7 @@ async function main() {
     const args = process.argv.slice(2);
     
     console.log('╔══════════════════════════════════════════════════════════════════════════╗');
-    console.log('║       PORSCHE OPTIONS EXTRACTOR v5.7 - FINAL                             ║');
+    console.log('║       PORSCHE OPTIONS EXTRACTOR v5.10 - COLOR BANDS + LIGHTBOX          ║');
     console.log('╚══════════════════════════════════════════════════════════════════════════╝\n');
     
     const db = new PorscheDB();
@@ -671,6 +1024,7 @@ async function main() {
             console.log('  node porsche_extractor_v5.js --init');
             console.log('  node porsche_extractor_v5.js --model 982890');
             console.log('  node porsche_extractor_v5.js --model 982890 --visible');
+            console.log('  node porsche_extractor_v5.js --model 982890 --debug-img   # Debug images');
             console.log('  node porsche_extractor_v5.js --stats');
             console.log('  node porsche_extractor_v5.js --list\n');
             return;
@@ -678,16 +1032,17 @@ async function main() {
         
         const modelCodes = args[modelIndex + 1].split(',').map(c => c.trim()).filter(c => c);
         const headless = !args.includes('--visible');
+        const debugImages = args.includes('--debug-img');
         
         const extractor = new PorscheExtractor(db, headless);
         await extractor.init();
         
         console.log(`🚗 Modèle(s): ${modelCodes.join(', ')}`);
-        console.log(`🔧 Mode: ${headless ? 'Invisible' : 'Visible'}\n`);
+        console.log(`🔧 Mode: ${headless ? 'Invisible' : 'Visible'}${debugImages ? ' + DEBUG IMAGES' : ''}\n`);
         
         let total = 0;
         for (const code of modelCodes) {
-            total += await extractor.extractModel(code);
+            total += await extractor.extractModel(code, debugImages);
             if (modelCodes.length > 1) await new Promise(r => setTimeout(r, 3000));
         }
         

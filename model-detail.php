@@ -1,6 +1,6 @@
 <?php
 /**
- * PORSCHE OPTIONS MANAGER v5.7 - Détail d'un modèle
+ * PORSCHE OPTIONS MANAGER v5.10 - Détail d'un modèle
  * Affiche couleurs extérieures, intérieures et options par catégorie
  */
 require_once 'config.php';
@@ -174,7 +174,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v5.8</p>
+                    <p class="text-gray-500 text-sm">v5.10</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
@@ -267,7 +267,8 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                         </button>
                         <?php if (!empty($color['image_url'])): ?>
                         <img src="<?= htmlspecialchars($color['image_url']) ?>" alt="<?= htmlspecialchars($color['name']) ?>" 
-                             class="w-full h-20 object-cover rounded-md mb-3 border border-gray-200">
+                             class="w-full h-20 object-cover rounded-md mb-3 border border-gray-200 cursor-pointer hover:opacity-80 transition"
+                             onclick="openLightbox('<?= htmlspecialchars($color['image_url']) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>')">
                         <?php else: ?>
                         <div class="w-full h-20 rounded-md bg-gradient-to-br from-gray-200 to-gray-400 mb-3 border border-gray-200 flex items-center justify-center">
                             <span class="text-2xl">🎨</span>
@@ -304,9 +305,27 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                     <div class="border border-porsche-border rounded-lg p-4 flex items-center justify-between hover:shadow-md transition option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?> group"
                          data-search="<?= htmlspecialchars(strtolower($color['code'] . ' ' . $color['name'])) ?>">
                         <div class="flex items-center gap-4">
-                            <?php if (!empty($color['image_url'])): ?>
+                            <?php if (!empty($color['image_url']) && str_starts_with($color['image_url'], 'colors:')): ?>
+                            <?php 
+                                $colorsStr = substr($color['image_url'], 7); // Remove "colors:" prefix
+                                $colors = explode(',', $colorsStr);
+                                $colorCount = count($colors);
+                            ?>
+                            <div class="w-16 h-16 rounded-md border border-gray-300 overflow-hidden flex flex-col cursor-pointer hover:opacity-80 transition"
+                                 onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($color['name'])) ?>', '<?= htmlspecialchars($colorsStr) ?>')">
+                                <?php foreach ($colors as $c): ?>
+                                <div class="flex-1" style="background-color: <?= htmlspecialchars(trim($c)) ?>"></div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php elseif (!empty($color['image_url']) && str_starts_with($color['image_url'], 'gradient:')): ?>
+                            <?php $gradient = substr($color['image_url'], 9); ?>
+                            <div class="w-16 h-16 rounded-md border border-gray-300 cursor-pointer hover:opacity-80 transition" 
+                                 style="background-image: <?= htmlspecialchars($gradient) ?>"
+                                 onclick="openLightbox('<?= htmlspecialchars($gradient) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>', true)"></div>
+                            <?php elseif (!empty($color['image_url'])): ?>
                             <img src="<?= htmlspecialchars($color['image_url']) ?>" alt="<?= htmlspecialchars($color['name']) ?>" 
-                                 class="w-16 h-16 object-cover rounded-md border border-gray-300">
+                                 class="w-16 h-16 object-cover rounded-md border border-gray-300 cursor-pointer hover:opacity-80 transition"
+                                 onclick="openLightbox('<?= htmlspecialchars($color['image_url']) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>')">
                             <?php else: ?>
                             <div class="w-16 h-16 rounded-md bg-gradient-to-br from-gray-200 to-gray-400 border border-gray-300 flex items-center justify-center">
                                 <span class="text-2xl">🛋️</span>
@@ -358,32 +377,56 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 <?php endif; ?>
                 <div>
                     <?php $i = 0; foreach ($categoryOptions as $opt): ?>
-                    <div class="px-4 py-3 flex items-center justify-between hover:bg-gray-100 transition option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>"
+                    <div class="option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>"
                          data-search="<?= htmlspecialchars(strtolower($opt['code'] . ' ' . $opt['name'])) ?>">
-                        <div class="flex items-center gap-4">
-                            <?php if ($opt['option_type'] === 'seat' && !empty($opt['image_url'])): ?>
-                            <img src="<?= htmlspecialchars($opt['image_url']) ?>" alt="<?= htmlspecialchars($opt['name']) ?>" 
-                                 class="w-16 h-12 object-cover rounded border border-gray-300">
-                            <?php endif; ?>
-                            <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded w-16 text-center"><?= htmlspecialchars($opt['code']) ?></span>
-                            <span class="text-sm"><?= htmlspecialchars($opt['name']) ?></span>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="text-sm <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
-                                <?php if ($opt['is_standard']): ?>
-                                    Série
-                                <?php elseif ($opt['price']): ?>
-                                    <?= formatPrice($opt['price']) ?>
+                        <div class="px-4 py-3 flex items-center justify-between hover:bg-gray-100 transition">
+                            <div class="flex items-center gap-4">
+                                <!-- Image thumbnail for ALL types -->
+                                <?php if (!empty($opt['image_url']) && str_starts_with($opt['image_url'], 'colors:')): ?>
+                                <?php 
+                                    $colorsStr = substr($opt['image_url'], 7);
+                                    $colors = explode(',', $colorsStr);
+                                ?>
+                                <div class="w-16 h-12 rounded border border-gray-200 flex-shrink-0 overflow-hidden flex flex-col cursor-pointer hover:opacity-80 transition"
+                                     onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($opt['name'])) ?>', '<?= htmlspecialchars($colorsStr) ?>')">
+                                    <?php foreach ($colors as $c): ?>
+                                    <div class="flex-1" style="background-color: <?= htmlspecialchars(trim($c)) ?>"></div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php elseif (!empty($opt['image_url']) && str_starts_with($opt['image_url'], 'gradient:')): ?>
+                                <?php $gradient = substr($opt['image_url'], 9); ?>
+                                <div class="w-16 h-12 rounded border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition" 
+                                     style="background-image: <?= htmlspecialchars($gradient) ?>"
+                                     onclick="openLightbox('<?= htmlspecialchars($gradient) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>', true)"></div>
+                                <?php elseif (!empty($opt['image_url'])): ?>
+                                <img src="<?= htmlspecialchars($opt['image_url']) ?>" alt="<?= htmlspecialchars($opt['name']) ?>" 
+                                     class="w-16 h-12 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+                                     loading="lazy"
+                                     onclick="openLightbox('<?= htmlspecialchars($opt['image_url']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>')"
+                                     onerror="this.style.display='none'">
                                 <?php else: ?>
-                                    <span class="text-gray-400">-</span>
+                                <div class="w-16 h-12 rounded border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs">—</div>
                                 <?php endif; ?>
-                            </span>
-                            <button onclick="deleteOption(<?= $opt['id'] ?>, '<?= htmlspecialchars($opt['code']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>')" 
-                                    class="text-gray-300 hover:text-red-500 transition p-1" title="Supprimer cette option">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                            </button>
+                                <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded w-16 text-center flex-shrink-0"><?= htmlspecialchars($opt['code']) ?></span>
+                                <span class="text-sm"><?= htmlspecialchars($opt['name']) ?></span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="text-sm <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
+                                    <?php if ($opt['is_standard']): ?>
+                                        Série
+                                    <?php elseif ($opt['price']): ?>
+                                        <?= formatPrice($opt['price']) ?>
+                                    <?php else: ?>
+                                        <span class="text-gray-400">-</span>
+                                    <?php endif; ?>
+                                </span>
+                                <button onclick="deleteOption(<?= $opt['id'] ?>, '<?= htmlspecialchars($opt['code']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>')" 
+                                        class="text-gray-300 hover:text-red-500 transition p-1" title="Supprimer cette option">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <?php $i++; endforeach; ?>
@@ -420,7 +463,74 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
     <script>setTimeout(() => document.getElementById('notification').remove(), 3000);</script>
     <?php endif; ?>
 
+    <!-- Footer -->
+    <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
+        Porsche Options Manager v5.10 — Interface inspirée du configurateur Porsche
+    </footer>
+
+    <!-- Lightbox Modal -->
+    <div id="lightbox" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden items-center justify-center p-4" onclick="closeLightbox(event)">
+        <button onclick="closeLightbox()" class="absolute top-4 right-4 text-white hover:text-gray-300 text-4xl">&times;</button>
+        <div class="max-w-4xl max-h-full flex flex-col items-center">
+            <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl">
+            <div id="lightbox-colors" class="hidden w-64 h-64 rounded-lg shadow-2xl border-4 border-white overflow-hidden flex flex-col"></div>
+            <p id="lightbox-caption" class="text-white text-center mt-4 text-lg"></p>
+        </div>
+    </div>
+
     <script>
+        // Lightbox functions
+        function openLightbox(src, caption, colorsOrGradient = false) {
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            const colorsDiv = document.getElementById('lightbox-colors');
+            const captionEl = document.getElementById('lightbox-caption');
+            
+            // Reset
+            img.classList.add('hidden');
+            colorsDiv.classList.add('hidden');
+            colorsDiv.innerHTML = '';
+            
+            if (colorsOrGradient && typeof colorsOrGradient === 'string') {
+                // Colors format: "#000000,#333333,#666666"
+                const colors = colorsOrGradient.split(',');
+                colors.forEach(color => {
+                    const band = document.createElement('div');
+                    band.className = 'flex-1';
+                    band.style.backgroundColor = color.trim();
+                    colorsDiv.appendChild(band);
+                });
+                colorsDiv.classList.remove('hidden');
+            } else if (colorsOrGradient === true) {
+                // Gradient format
+                colorsDiv.style.backgroundImage = src;
+                colorsDiv.classList.remove('hidden');
+            } else if (src) {
+                // Regular image
+                img.src = src;
+                img.alt = caption;
+                img.classList.remove('hidden');
+            }
+            
+            captionEl.textContent = caption;
+            lightbox.classList.remove('hidden');
+            lightbox.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeLightbox(event) {
+            if (event && event.target !== event.currentTarget && !event.target.closest('button')) return;
+            const lightbox = document.getElementById('lightbox');
+            lightbox.classList.add('hidden');
+            lightbox.classList.remove('flex');
+            document.body.style.overflow = '';
+        }
+        
+        // Close on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeLightbox();
+        });
+
         // Suppression d'option
         function deleteOption(id, code, name) {
             if (confirm(`Supprimer l'option [${code}] ${name} ?`)) {

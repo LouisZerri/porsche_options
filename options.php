@@ -1,7 +1,7 @@
 <?php
 /**
- * PORSCHE OPTIONS MANAGER v5.7 - Recherche d'options
- * Avec filtres par type et catégorie
+ * PORSCHE OPTIONS MANAGER v5.9 - Recherche d'options
+ * Avec filtres par type et catégorie + affichage images
  */
 require_once 'config.php';
 
@@ -144,7 +144,7 @@ $typeLabels = [
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v5.8</p>
+                    <p class="text-gray-500 text-sm">v5.9</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
@@ -203,18 +203,33 @@ $typeLabels = [
                 <div>
                     <?php $i = 0; foreach ($categoryOptions as $opt): ?>
                     <div class="px-4 py-3 flex items-center hover:bg-gray-100 transition <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>">
-                        <span class="w-12 text-center">
+                        <!-- Image thumbnail -->
+                        <div class="w-16 h-12 mr-3 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                            <?php if (!empty($opt['image_url']) && str_starts_with($opt['image_url'], 'gradient:')): ?>
+                            <?php $gradient = substr($opt['image_url'], 9); ?>
+                            <div class="w-full h-full" style="background-image: <?= htmlspecialchars($gradient) ?>"></div>
+                            <?php elseif (!empty($opt['image_url'])): ?>
+                            <img src="<?= htmlspecialchars($opt['image_url']) ?>" 
+                                 alt="<?= htmlspecialchars($opt['name']) ?>"
+                                 class="w-full h-full object-cover"
+                                 loading="lazy"
+                                 onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center text-gray-400 text-xs\'>—</div>'">
+                            <?php else: ?>
+                            <div class="w-full h-full flex items-center justify-center text-gray-400 text-xs">—</div>
+                            <?php endif; ?>
+                        </div>
+                        <span class="w-8 text-center flex-shrink-0">
                             <?php
                             $icons = ['color_ext' => '🎨', 'color_int' => '🛋️', 'wheel' => '🛞', 'seat' => '💺', 'pack' => '📦', 'option' => '⚙️'];
                             echo $icons[$opt['option_type']] ?? '⚙️';
                             ?>
                         </span>
-                        <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"><?= htmlspecialchars($opt['code']) ?></span>
-                        <span class="flex-1"><?= htmlspecialchars($opt['name']) ?></span>
-                        <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6">
+                        <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded flex-shrink-0"><?= htmlspecialchars($opt['code']) ?></span>
+                        <span class="flex-1 ml-3 truncate"><?= htmlspecialchars($opt['name']) ?></span>
+                        <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6 flex-shrink-0">
                             <?= htmlspecialchars($opt['model_name']) ?>
                         </a>
-                        <span class="w-24 text-right <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
+                        <span class="w-24 text-right flex-shrink-0 <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
                             <?php if ($opt['is_standard']): ?>
                             Série
                             <?php else: ?>
@@ -266,5 +281,8 @@ $typeLabels = [
         <?php endif; ?>
     </main>
 
+    <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
+        Porsche Options Manager v5.9
+    </footer>
 </body>
 </html>
