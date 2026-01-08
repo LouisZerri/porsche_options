@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if ($action === 'init_db') {
-            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --init 2>&1', 
+            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --init 2>&1', 
                 escapeshellarg($extractorDir), $nodePath);
             $output = shell_exec($cmd);
             file_put_contents($logFile, "Commande: $cmd\n\n" . $output);
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'extract_model' && !empty($_POST['model'])) {
             $model = $_POST['model'];
             // Mode SYNCHRONE pour voir le résultat directement
-            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --model %s 2>&1',
+            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s 2>&1',
                 escapeshellarg($extractorDir), $nodePath, escapeshellarg($model));
             
             file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'extract_model_async' && !empty($_POST['model'])) {
             $model = $_POST['model'];
             // Mode ASYNCHRONE (arrière-plan)
-            $cmd = sprintf('cd %s && %s porsche_extractor_v5.js --model %s > %s 2>&1 & echo $!',
+            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s > %s 2>&1 & echo $!',
                 escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), escapeshellarg($logFile));
             $pid = trim(shell_exec($cmd));
             if ($pid && is_numeric($pid)) {
@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Test de diagnostic
             $output = "=== DIAGNOSTIC ===\n\n";
             $output .= "📁 Dossier extracteur: $extractorDir\n";
-            $output .= "📄 Script v5 existe: " . (file_exists($extractorDir . '/porsche_extractor_v5.js') ? '✅ Oui' : '❌ Non') . "\n";
+            $output .= "📄 Script v6 existe: " . (file_exists($extractorDir . '/porsche_extractor_v6.js') ? '✅ Oui' : '❌ Non') . "\n";
             $output .= "📦 node_modules existe: " . (is_dir($extractorDir . '/node_modules') ? '✅ Oui' : '❌ Non (faire npm install)') . "\n";
             $output .= "📦 browsers existe: " . (is_dir($extractorDir . '/browsers') ? '✅ Oui' : '❌ Non (faire npm run setup)') . "\n";
             $output .= "🔧 Node.js path: $nodePath\n";
@@ -329,11 +329,11 @@ try {
                     <p class="text-gray-500 text-xs mb-2">Commandes à exécuter :</p>
                     <div class="bg-gray-900 rounded p-3 font-mono text-xs text-green-400 space-y-1">
                         <p>cd extractor</p>
-                        <p>node porsche_extractor_v5.js --init</p>
-                        <p>node porsche_extractor_v5.js --model 982850</p>
+                        <p>node porsche_extractor_v6.js --init</p>
+                        <p>node porsche_extractor_v6.js --model 982850</p>
                         <p class="text-gray-500"># Avec debug images:</p>
-                        <p>node porsche_extractor_v5.js --model 982850 --debug-img</p>
-                        <p>node porsche_extractor_v5.js --list</p>
+                        <p>node porsche_extractor_v6.js --model 982850 --debug-img</p>
+                        <p>node porsche_extractor_v6.js --list</p>
                     </div>
                 </div>
 
@@ -375,7 +375,7 @@ try {
     </main>
 
     <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v5.8 - Image Mapping
+        Porsche Options Manager v6.0 - Complete Overhaul
     </footer>
 
     <script>

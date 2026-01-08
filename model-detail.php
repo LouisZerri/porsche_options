@@ -1,7 +1,7 @@
 <?php
 /**
- * PORSCHE OPTIONS MANAGER v5.10 - Détail d'un modèle
- * Affiche couleurs extérieures, intérieures et options par catégorie
+ * PORSCHE OPTIONS MANAGER v6.1 - Détail d'un modèle
+ * Affiche couleurs extérieures, capotes, intérieures et options par catégorie
  */
 require_once 'config.php';
 
@@ -19,8 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_option_id'])) 
         // Mettre à jour les compteurs du modèle
         $stmt = $db->prepare("
             UPDATE p_models m SET 
-                options_count = (SELECT COUNT(*) FROM p_options WHERE model_id = m.id AND option_type NOT IN ('color_ext', 'color_int')),
-                colors_ext_count = (SELECT COUNT(*) FROM p_options WHERE model_id = m.id AND option_type = 'color_ext'),
+                options_count = (SELECT COUNT(*) FROM p_options WHERE model_id = m.id AND option_type NOT IN ('color_ext', 'color_int', 'hood')),
+                colors_ext_count = (SELECT COUNT(*) FROM p_options WHERE model_id = m.id AND option_type IN ('color_ext', 'hood')),
                 colors_int_count = (SELECT COUNT(*) FROM p_options WHERE model_id = m.id AND option_type = 'color_int')
             WHERE code = ?
         ");
@@ -41,6 +41,7 @@ if (!$code) {
 
 $model = null;
 $extColors = [];
+$hoods = [];
 $intColors = [];
 $options = [];
 
@@ -70,10 +71,21 @@ try {
         FROM p_options o
         LEFT JOIN p_categories c ON o.category_id = c.id
         WHERE o.model_id = ? AND o.option_type = 'color_ext'
-        ORDER BY o.price ASC
+        ORDER BY o.display_order ASC, o.price ASC
     ");
     $stmt->execute([$model['id']]);
     $extColors = $stmt->fetchAll();
+    
+    // Capotes / Toits
+    $stmt = $db->prepare("
+        SELECT o.*, c.name as category_name, c.parent_name
+        FROM p_options o
+        LEFT JOIN p_categories c ON o.category_id = c.id
+        WHERE o.model_id = ? AND o.option_type = 'hood'
+        ORDER BY o.display_order ASC, o.price ASC
+    ");
+    $stmt->execute([$model['id']]);
+    $hoods = $stmt->fetchAll();
     
     // Couleurs intérieures
     $stmt = $db->prepare("
@@ -81,7 +93,7 @@ try {
         FROM p_options o
         LEFT JOIN p_categories c ON o.category_id = c.id
         WHERE o.model_id = ? AND o.option_type = 'color_int'
-        ORDER BY o.price ASC
+        ORDER BY o.display_order ASC, o.price ASC
     ");
     $stmt->execute([$model['id']]);
     $intColors = $stmt->fetchAll();
@@ -91,8 +103,8 @@ try {
         SELECT o.*, c.name as category_name, c.parent_name
         FROM p_options o
         LEFT JOIN p_categories c ON o.category_id = c.id
-        WHERE o.model_id = ? AND o.option_type NOT IN ('color_ext', 'color_int')
-        ORDER BY c.parent_name, c.name, o.price DESC
+        WHERE o.model_id = ? AND o.option_type NOT IN ('color_ext', 'color_int', 'hood')
+        ORDER BY o.display_order ASC, c.parent_name, c.name, o.price DESC
     ");
     $stmt->execute([$model['id']]);
     $options = $stmt->fetchAll();
@@ -114,28 +126,41 @@ foreach ($options as $opt) {
     }
     $byParent[$parent][$cat][] = $opt;
 }
-ksort($byParent);
 
-// Aussi garder l'ancien format pour compatibilité
-$byCategory = [];
-foreach ($options as $opt) {
-    $parent = $opt['parent_name'] ?: 'Autre';
-    $cat = $opt['category_name'] ?: 'Autre';
-    $key = $parent !== $cat ? "$parent > $cat" : $cat;
-    if (!isset($byCategory[$key])) {
-        $byCategory[$key] = [];
-    }
-    $byCategory[$key][] = $opt;
-}
-ksort($byCategory);
+// Ordre des catégories comme sur le configurateur Porsche
+$categoryOrder = [
+    'Couleurs Extérieures' => 1,
+    'Jantes' => 2,
+    'Couleurs Intérieures' => 3,
+    'Sièges' => 4,
+    'Packs' => 5,
+    'Extérieur' => 6,
+    'Intérieur' => 7,
+    'Technologies' => 8,
+    'Accessoires pour véhicules' => 9,
+    'Livraison spéciale' => 10,
+    'Autre' => 99
+];
+
+// Trier les catégories selon l'ordre du configurateur
+uksort($byParent, function($a, $b) use ($categoryOrder) {
+    $orderA = $categoryOrder[$a] ?? 50;
+    $orderB = $categoryOrder[$b] ?? 50;
+    return $orderA - $orderB;
+});
+
+// Extraire Jantes pour l'afficher au bon endroit (après Couleurs Ext)
+$jantes = $byParent['Jantes'] ?? [];
+unset($byParent['Jantes']);
 
 // Stats
-$totalOptions = count($extColors) + count($intColors) + count($options);
+$totalOptions = count($extColors) + count($hoods) + count($intColors) + count($options);
 $totalValue = 0;
-foreach (array_merge($extColors, $intColors, $options) as $o) {
+foreach (array_merge($extColors, $hoods, $intColors, $options) as $o) {
     if (!$o['is_standard'] && $o['price']) $totalValue += $o['price'];
 }
-$standardCount = count(array_filter(array_merge($extColors, $intColors, $options), fn($o) => $o['is_standard']));
+$standardCount = count(array_filter(array_merge($extColors, $hoods, $intColors, $options), fn($o) => $o['is_standard']));
+$exclusiveCount = count(array_filter(array_merge($extColors, $hoods, $intColors, $options), fn($o) => $o['is_exclusive_manufaktur'] ?? false));
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -161,6 +186,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
         body { font-family: 'PorscheNext', 'Segoe UI', Arial, sans-serif; }
         .collapsed .section-content { display: none; }
         .section-header:hover { background-color: #f7f7f7; }
+        .exclusive-badge { background: linear-gradient(135deg, #d4af37, #f4e4bc); }
     </style>
 </head>
 <body class="bg-white text-black min-h-screen">
@@ -174,7 +200,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v5.10</p>
+                    <p class="text-gray-500 text-sm">v6.1</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
@@ -212,7 +238,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
         </div>
 
         <!-- Stats Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
             <div class="bg-porsche-gray rounded-lg p-4">
                 <p class="text-xs text-gray-500 uppercase tracking-wide">Total</p>
                 <p class="text-2xl font-bold"><?= $totalOptions ?></p>
@@ -222,6 +248,10 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 <p class="text-2xl font-bold"><?= count($extColors) ?></p>
             </div>
             <div class="bg-porsche-gray rounded-lg p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Capotes</p>
+                <p class="text-2xl font-bold"><?= count($hoods) ?></p>
+            </div>
+            <div class="bg-porsche-gray rounded-lg p-4">
                 <p class="text-xs text-gray-500 uppercase tracking-wide">Couleurs int.</p>
                 <p class="text-2xl font-bold"><?= count($intColors) ?></p>
             </div>
@@ -229,10 +259,17 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 <p class="text-xs text-gray-500 uppercase tracking-wide">De série</p>
                 <p class="text-2xl font-bold text-green-600"><?= $standardCount ?></p>
             </div>
+            <?php if ($exclusiveCount > 0): ?>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p class="text-xs text-amber-700 uppercase tracking-wide">Exclusive</p>
+                <p class="text-2xl font-bold text-amber-700"><?= $exclusiveCount ?></p>
+            </div>
+            <?php else: ?>
             <div class="bg-porsche-gray rounded-lg p-4">
                 <p class="text-xs text-gray-500 uppercase tracking-wide">Valeur options</p>
                 <p class="text-2xl font-bold"><?= formatPrice($totalValue) ?></p>
             </div>
+            <?php endif; ?>
         </div>
 
         <!-- Search -->
@@ -241,20 +278,21 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                    class="w-full border border-porsche-border rounded-lg px-4 py-3 focus:outline-none focus:border-black focus:ring-1 focus:ring-black">
         </div>
 
-        <!-- COULEURS EXTÉRIEURES -->
-        <?php if (!empty($extColors)): ?>
+        <!-- COULEURS EXTÉRIEURES (incluant Capotes/Toits) -->
+        <?php if (!empty($extColors) || !empty($hoods)): ?>
         <div class="border border-porsche-border rounded-lg mb-4 option-section">
             <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border"
                  onclick="this.parentElement.classList.toggle('collapsed')">
-                <h3 class="font-bold text-lg">Couleurs Extérieures</h3>
+                <h3 class="font-bold text-lg">🎨 Couleurs Extérieures</h3>
                 <div class="flex items-center gap-3">
-                    <span class="text-gray-500 text-sm"><?= count($extColors) ?> couleurs</span>
+                    <span class="text-gray-500 text-sm"><?= count($extColors) + count($hoods) ?> options</span>
                     <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
                 </div>
             </div>
             <div class="section-content p-4">
+                <?php if (!empty($extColors)): ?>
                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     <?php $i = 0; foreach ($extColors as $color): ?>
                     <div class="border border-porsche-border rounded-lg p-4 hover:shadow-md transition option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?> relative group" 
@@ -282,6 +320,109 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                     </div>
                     <?php $i++; endforeach; ?>
                 </div>
+                <?php endif; ?>
+                
+                <?php if (!empty($hoods)): ?>
+                <!-- Sous-section Capotes -->
+                <div class="mt-4 pt-4 border-t border-porsche-border">
+                    <h4 class="font-medium text-sm text-gray-600 mb-3">Capotes / Toits</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <?php $i = 0; foreach ($hoods as $hood): ?>
+                        <div class="border border-porsche-border rounded-lg p-4 hover:shadow-md transition option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?> relative group" 
+                             data-search="<?= htmlspecialchars(strtolower($hood['code'] . ' ' . $hood['name'])) ?>">
+                            <button onclick="deleteOption(<?= $hood['id'] ?>, '<?= htmlspecialchars($hood['code']) ?>', '<?= htmlspecialchars(addslashes($hood['name'])) ?>')" 
+                                    class="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition p-1 opacity-0 group-hover:opacity-100" title="Supprimer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                            <?php if (!empty($hood['image_url']) && str_starts_with($hood['image_url'], 'colors:')): ?>
+                            <?php 
+                                $colorsStr = substr($hood['image_url'], 7);
+                                $colors = explode(',', $colorsStr);
+                            ?>
+                            <div class="w-full h-20 rounded-md mb-3 border border-gray-200 overflow-hidden flex cursor-pointer hover:opacity-80 transition"
+                                 onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($hood['name'])) ?>', '<?= htmlspecialchars($colorsStr) ?>')">
+                                <?php foreach ($colors as $c): ?>
+                                <div class="flex-1 h-full" style="background-color: <?= htmlspecialchars(trim($c)) ?>"></div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php elseif (!empty($hood['image_url'])): ?>
+                            <img src="<?= htmlspecialchars($hood['image_url']) ?>" alt="<?= htmlspecialchars($hood['name']) ?>" 
+                                 class="w-full h-20 object-cover rounded-md mb-3 border border-gray-200 cursor-pointer hover:opacity-80 transition"
+                                 onclick="openLightbox('<?= htmlspecialchars($hood['image_url']) ?>', '<?= htmlspecialchars(addslashes($hood['name'])) ?>')">
+                            <?php else: ?>
+                            <div class="w-full h-20 rounded-md bg-gradient-to-br from-gray-700 to-gray-900 mb-3 border border-gray-200 flex items-center justify-center">
+                                <span class="text-2xl">🏠</span>
+                            </div>
+                            <?php endif; ?>
+                            <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($hood['code']) ?></p>
+                            <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($hood['name']) ?></p>
+                            <p class="text-sm <?= $hood['is_standard'] ? 'text-green-600' : 'text-black font-medium' ?>">
+                                <?= $hood['is_standard'] ? 'Série' : ($hood['price'] ? formatPrice($hood['price']) : '-') ?>
+                            </p>
+                        </div>
+                        <?php $i++; endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- JANTES -->
+        <?php if (!empty($jantes)): ?>
+        <?php 
+            $allJantes = [];
+            foreach ($jantes as $subCat => $items) {
+                foreach ($items as $item) {
+                    $allJantes[] = $item;
+                }
+            }
+        ?>
+        <div class="border border-porsche-border rounded-lg mb-4 option-section">
+            <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border"
+                 onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3 class="font-bold text-lg">🛞 Jantes</h3>
+                <div class="flex items-center gap-3">
+                    <span class="text-gray-500 text-sm"><?= count($allJantes) ?> options</span>
+                    <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="section-content p-4">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <?php $i = 0; foreach ($allJantes as $jante): ?>
+                    <div class="border border-porsche-border rounded-lg p-4 hover:shadow-md transition option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?> <?= ($jante['is_exclusive_manufaktur'] ?? false) ? 'bg-amber-50' : '' ?> relative group" 
+                         data-search="<?= htmlspecialchars(strtolower($jante['code'] . ' ' . $jante['name'])) ?>">
+                        <button onclick="deleteOption(<?= $jante['id'] ?>, '<?= htmlspecialchars($jante['code']) ?>', '<?= htmlspecialchars(addslashes($jante['name'])) ?>')" 
+                                class="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition p-1 opacity-0 group-hover:opacity-100" title="Supprimer">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                        <?php if (!empty($jante['image_url'])): ?>
+                        <img src="<?= htmlspecialchars($jante['image_url']) ?>" alt="<?= htmlspecialchars($jante['name']) ?>" 
+                             class="w-full h-20 object-contain rounded-md mb-3 border border-gray-200 cursor-pointer hover:opacity-80 transition bg-white"
+                             onclick="openLightbox('<?= htmlspecialchars($jante['image_url']) ?>', '<?= htmlspecialchars(addslashes($jante['name'])) ?>')"
+                             onerror="this.style.display='none'">
+                        <?php else: ?>
+                        <div class="w-full h-20 rounded-md bg-gradient-to-br from-gray-200 to-gray-400 mb-3 border border-gray-200 flex items-center justify-center">
+                            <span class="text-2xl">🛞</span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ($jante['is_exclusive_manufaktur'] ?? false): ?>
+                        <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full mb-1 inline-block">Exclusive Manufaktur</span>
+                        <?php endif; ?>
+                        <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($jante['code']) ?></p>
+                        <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($jante['name']) ?></p>
+                        <p class="text-sm <?= $jante['is_standard'] ? 'text-green-600' : 'text-black font-medium' ?>">
+                            <?= $jante['is_standard'] ? 'Série' : ($jante['price'] ? formatPrice($jante['price']) : '-') ?>
+                        </p>
+                    </div>
+                    <?php $i++; endforeach; ?>
+                </div>
             </div>
         </div>
         <?php endif; ?>
@@ -291,7 +432,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
         <div class="border border-porsche-border rounded-lg mb-4 option-section">
             <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border"
                  onclick="this.parentElement.classList.toggle('collapsed')">
-                <h3 class="font-bold text-lg">Couleurs Intérieures</h3>
+                <h3 class="font-bold text-lg">🛋️ Couleurs Intérieures</h3>
                 <div class="flex items-center gap-3">
                     <span class="text-gray-500 text-sm"><?= count($intColors) ?> options</span>
                     <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -309,7 +450,6 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                             <?php 
                                 $colorsStr = substr($color['image_url'], 7); // Remove "colors:" prefix
                                 $colors = explode(',', $colorsStr);
-                                $colorCount = count($colors);
                             ?>
                             <div class="w-16 h-16 rounded-md border border-gray-300 overflow-hidden flex flex-col cursor-pointer hover:opacity-80 transition"
                                  onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($color['name'])) ?>', '<?= htmlspecialchars($colorsStr) ?>')">
@@ -317,11 +457,6 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                                 <div class="flex-1" style="background-color: <?= htmlspecialchars(trim($c)) ?>"></div>
                                 <?php endforeach; ?>
                             </div>
-                            <?php elseif (!empty($color['image_url']) && str_starts_with($color['image_url'], 'gradient:')): ?>
-                            <?php $gradient = substr($color['image_url'], 9); ?>
-                            <div class="w-16 h-16 rounded-md border border-gray-300 cursor-pointer hover:opacity-80 transition" 
-                                 style="background-image: <?= htmlspecialchars($gradient) ?>"
-                                 onclick="openLightbox('<?= htmlspecialchars($gradient) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>', true)"></div>
                             <?php elseif (!empty($color['image_url'])): ?>
                             <img src="<?= htmlspecialchars($color['image_url']) ?>" alt="<?= htmlspecialchars($color['name']) ?>" 
                                  class="w-16 h-16 object-cover rounded-md border border-gray-300 cursor-pointer hover:opacity-80 transition"
@@ -377,38 +512,35 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                 <?php endif; ?>
                 <div>
                     <?php $i = 0; foreach ($categoryOptions as $opt): ?>
-                    <div class="option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>"
+                    <div class="option-row <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?> <?= ($opt['is_exclusive_manufaktur'] ?? false) ? 'bg-amber-50' : '' ?>"
                          data-search="<?= htmlspecialchars(strtolower($opt['code'] . ' ' . $opt['name'])) ?>">
                         <div class="px-4 py-3 flex items-center justify-between hover:bg-gray-100 transition">
                             <div class="flex items-center gap-4">
-                                <!-- Image thumbnail for ALL types -->
+                                <!-- Image thumbnail -->
                                 <?php if (!empty($opt['image_url']) && str_starts_with($opt['image_url'], 'colors:')): ?>
-                                <?php 
-                                    $colorsStr = substr($opt['image_url'], 7);
-                                    $colors = explode(',', $colorsStr);
-                                ?>
-                                <div class="w-16 h-12 rounded border border-gray-200 flex-shrink-0 overflow-hidden flex flex-col cursor-pointer hover:opacity-80 transition"
-                                     onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($opt['name'])) ?>', '<?= htmlspecialchars($colorsStr) ?>')">
+                                <?php $colors = explode(',', substr($opt['image_url'], 7)); ?>
+                                <div class="w-16 h-12 rounded border border-gray-200 flex-shrink-0 overflow-hidden flex flex-col cursor-pointer hover:opacity-80"
+                                     onclick="openLightbox(null, '<?= htmlspecialchars(addslashes($opt['name'])) ?>', '<?= htmlspecialchars(substr($opt['image_url'], 7)) ?>')">
                                     <?php foreach ($colors as $c): ?>
                                     <div class="flex-1" style="background-color: <?= htmlspecialchars(trim($c)) ?>"></div>
                                     <?php endforeach; ?>
                                 </div>
-                                <?php elseif (!empty($opt['image_url']) && str_starts_with($opt['image_url'], 'gradient:')): ?>
-                                <?php $gradient = substr($opt['image_url'], 9); ?>
-                                <div class="w-16 h-12 rounded border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition" 
-                                     style="background-image: <?= htmlspecialchars($gradient) ?>"
-                                     onclick="openLightbox('<?= htmlspecialchars($gradient) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>', true)"></div>
                                 <?php elseif (!empty($opt['image_url'])): ?>
                                 <img src="<?= htmlspecialchars($opt['image_url']) ?>" alt="<?= htmlspecialchars($opt['name']) ?>" 
-                                     class="w-16 h-12 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+                                     class="w-16 h-12 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-80"
                                      loading="lazy"
                                      onclick="openLightbox('<?= htmlspecialchars($opt['image_url']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>')"
                                      onerror="this.style.display='none'">
                                 <?php else: ?>
                                 <div class="w-16 h-12 rounded border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs">—</div>
                                 <?php endif; ?>
-                                <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded w-16 text-center flex-shrink-0"><?= htmlspecialchars($opt['code']) ?></span>
-                                <span class="text-sm"><?= htmlspecialchars($opt['name']) ?></span>
+                                <div>
+                                    <?php if ($opt['is_exclusive_manufaktur'] ?? false): ?>
+                                    <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full mr-2">Exclusive Manufaktur</span>
+                                    <?php endif; ?>
+                                    <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"><?= htmlspecialchars($opt['code']) ?></span>
+                                    <span class="text-sm ml-2"><?= htmlspecialchars($opt['name']) ?></span>
+                                </div>
                             </div>
                             <div class="flex items-center gap-4">
                                 <span class="text-sm <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
@@ -465,7 +597,7 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
 
     <!-- Footer -->
     <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v5.10 — Interface inspirée du configurateur Porsche
+        Porsche Options Manager v6.1 — Interface inspirée du configurateur Porsche
     </footer>
 
     <!-- Lightbox Modal -->
@@ -500,10 +632,6 @@ $standardCount = count(array_filter(array_merge($extColors, $intColors, $options
                     band.style.backgroundColor = color.trim();
                     colorsDiv.appendChild(band);
                 });
-                colorsDiv.classList.remove('hidden');
-            } else if (colorsOrGradient === true) {
-                // Gradient format
-                colorsDiv.style.backgroundImage = src;
                 colorsDiv.classList.remove('hidden');
             } else if (src) {
                 // Regular image

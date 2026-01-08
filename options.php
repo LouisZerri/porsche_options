@@ -1,6 +1,6 @@
 <?php
 /**
- * PORSCHE OPTIONS MANAGER v5.9 - Recherche d'options
+ * PORSCHE OPTIONS MANAGER v6.1 - Recherche d'options
  * Avec filtres par type et catégorie + affichage images
  */
 require_once 'config.php';
@@ -18,10 +18,10 @@ $stats = [];
 try {
     // Récupérer les catégories disponibles
     $categories = $db->query("
-        SELECT DISTINCT c.parent_name, c.name, COUNT(*) as count
+        SELECT c.parent_name, c.name, COUNT(*) as count
         FROM p_categories c
         JOIN p_options o ON o.category_id = c.id
-        GROUP BY c.id
+        GROUP BY c.parent_name, c.name
         ORDER BY c.parent_name, c.name
     ")->fetchAll();
     
@@ -89,20 +89,64 @@ try {
     $stats = [];
 }
 
+// Ordre des catégories comme sur le configurateur Porsche
+$categoryOrder = [
+    'Couleurs Extérieures' => 1,
+    'Jantes' => 2,
+    'Couleurs Intérieures' => 3,
+    'Sièges' => 4,
+    'Packs' => 5,
+    'Extérieur' => 6,
+    'Intérieur' => 7,
+    'Technologies' => 8,
+    'Accessoires pour véhicules' => 9,
+    'Livraison spéciale' => 10,
+    'Autre' => 99
+];
+
+// Trier les catégories disponibles selon l'ordre du configurateur
+usort($categories, function($a, $b) use ($categoryOrder) {
+    $orderA = $categoryOrder[$a['name']] ?? 50;
+    $orderB = $categoryOrder[$b['name']] ?? 50;
+    return $orderA - $orderB;
+});
+
 // Grouper les options par catégorie pour l'affichage
+// Les capotes (hood) sont regroupées avec Couleurs Extérieures
 $optionsByCategory = [];
 foreach ($options as $opt) {
-    $cat = $opt['parent_category'] ? $opt['parent_category'] . ' > ' . $opt['category_name'] : ($opt['category_name'] ?: 'Autre');
+    // Fusionner les capotes avec Couleurs Extérieures
+    if ($opt['option_type'] === 'hood') {
+        $cat = 'Couleurs Extérieures > Capotes';
+    } else {
+        $cat = $opt['parent_category'] ? $opt['parent_category'] . ' > ' . $opt['category_name'] : ($opt['category_name'] ?: 'Autre');
+    }
     if (!isset($optionsByCategory[$cat])) {
         $optionsByCategory[$cat] = [];
     }
     $optionsByCategory[$cat][] = $opt;
 }
-ksort($optionsByCategory);
+
+// Trier les catégories selon l'ordre du configurateur
+uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
+    // Extraire la catégorie parente (avant le ">")
+    $parentA = explode(' > ', $a)[0];
+    $parentB = explode(' > ', $b)[0];
+    
+    $orderA = $categoryOrder[$parentA] ?? 50;
+    $orderB = $categoryOrder[$parentB] ?? 50;
+    
+    // Si même catégorie parente, trier les sous-catégories alphabétiquement
+    if ($orderA === $orderB) {
+        return strcmp($a, $b);
+    }
+    return $orderA - $orderB;
+});
 
 // Labels types
 $typeLabels = [
     'color_ext' => '🎨 Couleurs Ext.',
+    'hood' => '🏠 Capotes',
     'color_int' => '🛋️ Couleurs Int.',
     'wheel' => '🛞 Jantes',
     'seat' => '💺 Sièges',
@@ -144,7 +188,7 @@ $typeLabels = [
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v5.9</p>
+                    <p class="text-gray-500 text-sm">v6.1</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
@@ -159,17 +203,17 @@ $typeLabels = [
     <main class="max-w-7xl mx-auto px-6 py-8">
         <h2 class="text-2xl font-bold mb-6">Options & Couleurs</h2>
 
-        <!-- Filtres par type -->
-        <?php if (!empty($stats)): ?>
+        <!-- Filtres par catégorie -->
+        <?php if (!empty($categories)): ?>
         <div class="flex flex-wrap gap-2 mb-6">
-            <a href="options.php" class="px-4 py-2 rounded <?= !$typeFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+            <a href="options.php" class="px-4 py-2 rounded <?= !$categoryFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
                 Tous
             </a>
-            <?php foreach ($stats as $s): ?>
-            <a href="?type=<?= urlencode($s['option_type']) ?>" 
-               class="px-4 py-2 rounded <?= $typeFilter === $s['option_type'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
-                <?= $typeLabels[$s['option_type']] ?? $s['option_type'] ?> 
-                <span class="text-gray-400">(<?= $s['count'] ?>)</span>
+            <?php foreach ($categories as $cat): ?>
+            <a href="?cat=<?= urlencode($cat['name']) ?>" 
+               class="px-4 py-2 rounded <?= $categoryFilter === $cat['name'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+                <?= htmlspecialchars($cat['name']) ?> 
+                <span class="text-gray-400">(<?= $cat['count'] ?>)</span>
             </a>
             <?php endforeach; ?>
         </div>
@@ -178,8 +222,8 @@ $typeLabels = [
         <!-- Recherche -->
         <form method="GET" class="mb-6">
             <div class="flex gap-4">
-                <?php if ($typeFilter): ?>
-                <input type="hidden" name="type" value="<?= htmlspecialchars($typeFilter) ?>">
+                <?php if ($categoryFilter): ?>
+                <input type="hidden" name="cat" value="<?= htmlspecialchars($categoryFilter) ?>">
                 <?php endif; ?>
                 <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" 
                        placeholder="Code ou nom (ex: PSM, Bose, Blanc...)"
@@ -220,7 +264,7 @@ $typeLabels = [
                         </div>
                         <span class="w-8 text-center flex-shrink-0">
                             <?php
-                            $icons = ['color_ext' => '🎨', 'color_int' => '🛋️', 'wheel' => '🛞', 'seat' => '💺', 'pack' => '📦', 'option' => '⚙️'];
+                            $icons = ['color_ext' => '🎨', 'hood' => '🏠', 'color_int' => '🛋️', 'wheel' => '🛞', 'seat' => '💺', 'pack' => '📦', 'option' => '⚙️'];
                             echo $icons[$opt['option_type']] ?? '⚙️';
                             ?>
                         </span>
@@ -259,16 +303,7 @@ $typeLabels = [
                 </div>
                 <?php else: ?>
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
-                    <?php 
-                    $currentParent = null;
-                    foreach ($categories as $cat): 
-                        if ($cat['parent_name'] !== $currentParent):
-                            $currentParent = $cat['parent_name'];
-                    ?>
-                    <div class="col-span-full text-gray-500 text-sm mt-4 first:mt-0 border-b border-porsche-border pb-2 font-medium">
-                        <?= htmlspecialchars($currentParent ?: 'Autre') ?>
-                    </div>
-                    <?php endif; ?>
+                    <?php foreach ($categories as $cat): ?>
                     <a href="?cat=<?= urlencode($cat['name']) ?>" 
                        class="border border-porsche-border hover:shadow-md hover:border-gray-400 rounded-lg p-3 transition">
                         <div class="font-medium"><?= htmlspecialchars($cat['name']) ?></div>
@@ -282,7 +317,7 @@ $typeLabels = [
     </main>
 
     <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v5.9
+        Porsche Options Manager v6.1
     </footer>
 </body>
 </html>
