@@ -188,7 +188,7 @@ $typeLabels = [
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v6.1</p>
+                    <p class="text-gray-500 text-sm">Gestions des options des modèles Porsche</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
@@ -315,9 +315,5 @@ $typeLabels = [
             </div>
         <?php endif; ?>
     </main>
-
-    <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v6.1
-    </footer>
 </body>
 </html>

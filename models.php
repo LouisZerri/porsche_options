@@ -82,7 +82,7 @@ try {
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v5.8</p>
+                    <p class="text-gray-500 text-sm">Gestion des modèles Porsche</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
