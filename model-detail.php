@@ -272,6 +272,64 @@ $exclusiveCount = count(array_filter(array_merge($extColors, $hoods, $intColors,
             <?php endif; ?>
         </div>
 
+        <?php
+        // Décoder les données techniques et équipements de série
+        $technicalData = !empty($model['technical_data']) ? json_decode($model['technical_data'], true) : [];
+        $standardEquipment = !empty($model['standard_equipment']) ? json_decode($model['standard_equipment'], true) : [];
+        ?>
+
+        <!-- DONNÉES TECHNIQUES -->
+        <?php if (!empty($technicalData)): ?>
+        <div class="border border-porsche-border rounded-lg mb-4 option-section">
+            <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border"
+                 onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3 class="font-bold text-lg">📊 Données techniques</h3>
+                <div class="flex items-center gap-3">
+                    <span class="text-gray-500 text-sm"><?= count($technicalData) ?> spécifications</span>
+                    <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-porsche-border">
+                    <?php foreach ($technicalData as $label => $value): ?>
+                    <div class="bg-white p-3 flex justify-between items-center">
+                        <span class="text-gray-600 text-sm"><?= htmlspecialchars($label) ?></span>
+                        <span class="font-medium text-sm"><?= htmlspecialchars($value) ?></span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- ÉQUIPEMENTS DE SÉRIE -->
+        <?php if (!empty($standardEquipment)): ?>
+        <div class="border border-porsche-border rounded-lg mb-4 option-section collapsed">
+            <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border"
+                 onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3 class="font-bold text-lg">✅ Équipements de série</h3>
+                <div class="flex items-center gap-3">
+                    <span class="text-gray-500 text-sm"><?= count($standardEquipment) ?> équipements</span>
+                    <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="section-content p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <?php foreach ($standardEquipment as $equipment): ?>
+                    <div class="flex items-start gap-2 p-2 rounded hover:bg-gray-50">
+                        <span class="text-green-500 mt-0.5">✓</span>
+                        <span class="text-sm"><?= htmlspecialchars($equipment) ?></span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Search -->
         <div class="mb-8">
             <input type="text" id="searchOptions" placeholder="Rechercher une option, couleur, code..." 

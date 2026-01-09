@@ -337,152 +337,121 @@ class PorscheExtractor {
             // ═══════════════════════════════════════════════════════════════
             // POINT 6: Extraire données techniques et équipement de série
             // ═══════════════════════════════════════════════════════════════
-            console.log('\n📊 Extraction des données techniques...');
+            console.log('\n📊 Extraction des données techniques et équipements de série...');
             
             let technicalData = {};
             let standardEquipment = [];
             
             try {
-                // Cliquer sur le lien des données techniques
-                const techLink = page.getByRole('link', { name: /données techniques/i }).first();
-                if (await techLink.count() > 0) {
-                    await techLink.click();
-                    await page.waitForTimeout(3000);
-                    
-                    console.log(`   📍 URL: ${page.url()}`);
-                    
-                    // Extraire les données techniques depuis les <dl>
-                    technicalData = await page.evaluate(() => {
-                        const data = {};
-                        document.querySelectorAll('dl').forEach(dl => {
-                            const dts = dl.querySelectorAll('dt');
-                            const dds = dl.querySelectorAll('dd');
-                            dts.forEach((dt, i) => {
-                                const key = dt.textContent?.trim();
-                                const value = dds[i]?.textContent?.trim();
-                                if (key && value && key.length < 100 && value.length < 200) {
-                                    data[key] = value;
-                                }
-                            });
+                // ÉTAPE 1: Naviguer vers l'onglet DONNÉES TECHNIQUES
+                const techUrl = `https://configurator.porsche.com/fr-FR/mode/model/${modelCode}/specifications?tab=technical-data`;
+                console.log(`   📍 Navigation vers: ${techUrl}`);
+                await page.goto(techUrl, { waitUntil: 'networkidle', timeout: 30000 });
+                await page.waitForTimeout(3000);
+                
+                // Extraire les données techniques depuis les <dl>
+                technicalData = await page.evaluate(() => {
+                    const data = {};
+                    document.querySelectorAll('dl').forEach(dl => {
+                        const dts = dl.querySelectorAll('dt');
+                        const dds = dl.querySelectorAll('dd');
+                        dts.forEach((dt, i) => {
+                            const key = dt.textContent?.trim();
+                            const value = dds[i]?.textContent?.trim();
+                            if (key && value && key.length < 100 && value.length < 200) {
+                                data[key] = value;
+                            }
                         });
-                        return data;
+                    });
+                    return data;
+                });
+                
+                console.log(`   ✓ ${Object.keys(technicalData).length} données techniques`);
+                Object.entries(technicalData).slice(0, 5).forEach(([k, v]) => console.log(`      • ${k}: ${v}`));
+                
+                // ÉTAPE 2: Naviguer vers l'onglet ÉQUIPEMENTS DE SÉRIE
+                const equipUrl = `https://configurator.porsche.com/fr-FR/mode/model/${modelCode}/specifications?tab=standard-equipment`;
+                console.log(`   📍 Navigation vers: ${equipUrl}`);
+                await page.goto(equipUrl, { waitUntil: 'networkidle', timeout: 30000 });
+                await page.waitForTimeout(3000);
+                
+                // Extraire les équipements de série
+                // La structure de la page utilise des sections avec h3 (catégories) et h4 (équipements)
+                standardEquipment = await page.evaluate(() => {
+                    const items = [];
+                    const seen = new Set();
+                    
+                    // Mots à exclure (navigation, marketing)
+                    const excludeWords = [
+                        'télécharger', 'pdf', 'tva', 'cookie', 'politique',
+                        'données techniques', 'équipement de série', 'configuration',
+                        'accepter', 'refuser', 'paramètre', 'en savoir plus',
+                        'votre rêve', 'rêve devient', 'devient réalité',
+                        'prix des options', 'configurer', 'configurez',
+                        'découvrir', 'découvrez', 'newsletter', 'contact',
+                        'personnalisez', 'créez votre', 'changer de modèle',
+                        'sauvegarder', 'code porsche', 'aperçu', 'dismiss',
+                        'prev', 'next', 'changer'
+                    ];
+                    
+                    const shouldExclude = (text) => {
+                        const lower = text.toLowerCase();
+                        if (excludeWords.some(w => lower.includes(w))) return true;
+                        if (text.length < 10 || text.length > 150) return true;
+                        if (text.includes('€')) return true;
+                        // Exclure les dimensions de jantes/pneus
+                        if (/^\d+[,.]?\d*\s*x\s*\d+/.test(text)) return true;
+                        if (/^\d+\/\d+\s*(zr|r)\s*\d+/i.test(text)) return true;
+                        return false;
+                    };
+                    
+                    // Méthode 1: Chercher les h4 qui sont les titres des équipements
+                    document.querySelectorAll('h4').forEach(h4 => {
+                        const text = h4.textContent?.trim();
+                        if (text && !shouldExclude(text) && !seen.has(text)) {
+                            seen.add(text);
+                            items.push(text);
+                        }
                     });
                     
-                    console.log(`   ✓ ${Object.keys(technicalData).length} données techniques`);
-                    // DEBUG POINT 6: Afficher quelques specs
-                    const techSamples = Object.entries(technicalData).slice(0, 3);
-                    techSamples.forEach(([k, v]) => console.log(`      - ${k}: ${v}`));
-                    
-                    // Cliquer sur l'onglet équipement de série
-                    try {
-                        const equipTab = page.locator('button[role="tab"]').filter({ hasText: /équipement/i }).first();
-                        if (await equipTab.count() > 0) {
-                            console.log(`   🖱️ Clic sur onglet "Équipements de série"...`);
-                            await equipTab.click();
-                            await page.waitForTimeout(3000);
-                            
-                            // DEBUG: Afficher le contenu de la page après clic
-                            const pageContent = await page.evaluate(() => {
-                                const content = {
-                                    activeTab: document.querySelector('button[role="tab"][aria-selected="true"]')?.textContent?.trim(),
-                                    h3s: Array.from(document.querySelectorAll('h3')).map(h => h.textContent?.trim()).slice(0, 10),
-                                    listsCount: document.querySelectorAll('ul, ol').length,
-                                    liCount: document.querySelectorAll('li').length,
-                                };
-                                return content;
-                            });
-                            
-                            console.log(`   📑 Onglet actif: ${pageContent.activeTab}`);
-                            console.log(`   📋 H3s: ${pageContent.h3s.slice(0, 5).join(', ')}`);
-                            console.log(`   📋 Listes: ${pageContent.listsCount}, Items: ${pageContent.liCount}`);
-                            
-                            // Extraire l'équipement depuis le panel actif
-                            standardEquipment = await page.evaluate(() => {
-                                const items = [];
-                                const seen = new Set();
-                                
-                                // Mots à exclure
-                                const excludeWords = [
-                                    'télécharger', 'pdf', 'tva', 'cookie', 'politique', 
-                                    'données techniques', 'équipement de série', 'configuration',
-                                    'accepter', 'refuser', 'paramètre', 'en savoir plus',
-                                    'couleur de série', 'couleur métallisée', 'couleur spéciale',
-                                    'capote', 'pouces', 'jantes'
-                                ];
-                                
-                                // Patterns à exclure (dimensions, specs techniques)
-                                const excludePatterns = [
-                                    /^\d+[,.]?\d*\s*x\s*\d+/i,  // 8,5x20
-                                    /^\d+\/\d+\s*(zr|r)\s*\d+/i, // 245/35 ZR 20
-                                    /^\d+\s*(ch|kw|nm|km|ps|cv)/i, // 500 ch, 450 Nm
-                                    /^[\d\s.,]+€/, // Prix
-                                    /puissance.*\d+\s*(kw|ch|ps)/i, // Puissance maximale 368 kW
-                                    /couple.*\d+\s*nm/i, // Couple maximal 450 Nm
-                                    /^\d+\s*haut-parleurs?$/i, // 6 haut-parleurs
-                                    /^\d+\s*watts?$/i, // 110 watts
-                                    /amplificateur/i // Amplificateur intégré
-                                ];
-                                
-                                const shouldExclude = (text) => {
-                                    const lower = text.toLowerCase();
-                                    if (excludeWords.some(w => lower.includes(w))) return true;
-                                    if (excludePatterns.some(p => p.test(text))) return true;
-                                    if (text.includes('€')) return true;
-                                    if (text.length < 15 || text.length > 300) return true;
-                                    return false;
-                                };
-                                
-                                // Chercher dans le panel actif ou le contenu visible
-                                const activePanel = document.querySelector('[role="tabpanel"]:not([hidden])') ||
-                                                   document.querySelector('[role="tabpanel"][aria-hidden="false"]') ||
-                                                   document.querySelector('.tab-content:not(.hidden)');
-                                
-                                const searchRoot = activePanel || document.body;
-                                
-                                // Méthode 1: Chercher les listes
-                                searchRoot.querySelectorAll('li').forEach(li => {
-                                    if (li.closest('nav, header, footer, [role="menu"], [role="tablist"]')) return;
-                                    
-                                    const text = li.textContent?.trim();
-                                    if (text && !shouldExclude(text) && !seen.has(text)) {
-                                        // Vérifier que c'est un vrai équipement (contient des mots descriptifs)
-                                        const hasDescriptiveWords = /système|éclairage|rétroviseur|volant|suspension|direction|climatisation|audio|bluetooth|usb|navigation|caméra|capteur|aide|assistant|frein|airbag|ceinture|siège|chauffant|cuir|aluminium|sport|confort|pack/i.test(text);
-                                        if (hasDescriptiveWords || text.length > 30) {
-                                            seen.add(text);
-                                            items.push(text);
-                                        }
-                                    }
-                                });
-                                
-                                // Méthode 2: Chercher les paragraphes structurés si pas assez de résultats
-                                if (items.length < 10) {
-                                    searchRoot.querySelectorAll('p, div[class*="equipment"], div[class*="feature"]').forEach(el => {
-                                        if (el.closest('nav, header, footer')) return;
-                                        if (el.querySelectorAll('*').length > 3) return; // Pas trop d'enfants
-                                        
-                                        const text = el.textContent?.trim();
-                                        if (text && !shouldExclude(text) && !seen.has(text)) {
-                                            seen.add(text);
-                                            items.push(text);
-                                        }
-                                    });
-                                }
-                                
-                                return items;
-                            });
-                            
-                            console.log(`   ✓ ${standardEquipment.length} équipements de série`);
-                            // DEBUG POINT 6: Afficher quelques équipements
-                            standardEquipment.slice(0, 5).forEach(e => console.log(`      • ${e.substring(0, 60)}...`));
+                    // Méthode 2: Chercher dans le flyout/panel des équipements de série
+                    // Les éléments sont souvent dans des divs avec des classes spécifiques
+                    document.querySelectorAll('[class*="equipment"] h4, [class*="feature"] h4, [class*="standard"] h4').forEach(el => {
+                        const text = el.textContent?.trim();
+                        if (text && !shouldExclude(text) && !seen.has(text)) {
+                            seen.add(text);
+                            items.push(text);
                         }
-                    } catch (e) {
-                        console.log(`   ⚠️ Onglet équipement: ${e.message}`);
-                    }
+                    });
                     
-                    // Revenir au configurateur
-                    await page.goBack();
-                    await page.waitForTimeout(2000);
-                }
+                    // Méthode 3: Chercher les éléments avec "Équipement de série" comme badge
+                    document.querySelectorAll('*').forEach(el => {
+                        if (el.textContent?.includes('Équipement de série')) {
+                            // Remonter pour trouver le titre associé
+                            const parent = el.closest('div, article, section, li');
+                            if (parent) {
+                                const title = parent.querySelector('h4, h5, [class*="title"], [class*="name"]');
+                                if (title) {
+                                    const text = title.textContent?.trim();
+                                    if (text && !shouldExclude(text) && !seen.has(text)) {
+                                        seen.add(text);
+                                        items.push(text);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    return items;
+                });
+                
+                console.log(`   ✓ ${standardEquipment.length} équipements de série`);
+                standardEquipment.slice(0, 8).forEach(e => console.log(`      • ${e}`));
+                
+                // Retourner à la page du configurateur
+                await page.goto(`https://configurator.porsche.com/fr-FR/mode/model/${modelCode}`, { waitUntil: 'networkidle', timeout: 30000 });
+                await page.waitForTimeout(2000);
+                
             } catch (e) {
                 console.log(`   ⚠️ Données techniques: ${e.message}`);
             }
@@ -1267,24 +1236,11 @@ class PorscheExtractor {
                 // Chercher les BOUTONS avec "accessoires" ou "livraison"
                 const sectionButtons = document.querySelectorAll('button[aria-expanded], button[aria-controls]');
                 
-                // DEBUG: capturer les boutons trouvés
-                const debugButtons = [];
-                
                 sectionButtons.forEach(btn => {
                     // Utiliser aria-controls pour identifier les sections (plus fiable que le texte)
                     const sectionContainerId = btn.getAttribute('aria-controls') || '';
                     const btnText = btn.textContent?.trim() || '';
                     const btnLower = btnText.toLowerCase();
-                    
-                    // DEBUG: capturer tous les boutons avec "accessoires" ou "livraison"
-                    if (btnLower.includes('accessoires') || btnLower.includes('livraison')) {
-                        debugButtons.push({ 
-                            text: btnText.substring(0, 60), 
-                            id: sectionContainerId,
-                            startsWithAccessoires: btnLower.startsWith('accessoires pour véhicules'),
-                            includesAccessoiresPourV: btnLower.includes('accessoires pour v')
-                        });
-                    }
                     
                     // Identifier les sections par aria-controls ou par le texte
                     const isMainAccessoires = sectionContainerId.includes('vehicle-accessories') || 
@@ -1417,7 +1373,6 @@ class PorscheExtractor {
                 });
                 
                 debugInfo.remainingInputs = remainingInputs;
-                debugInfo.debugButtons = debugButtons;
                 
                 return { results, debugInfo };
             }, imageMap);
@@ -1528,14 +1483,6 @@ class PorscheExtractor {
                 });
             } else {
                 console.log('\n   ✅ Tous les inputs name="options" ont été extraits');
-            }
-            
-            // DEBUG: afficher les boutons Accessoires/Livraison trouvés
-            if (debugInfo.debugButtons && debugInfo.debugButtons.length > 0) {
-                console.log(`\n   📍 DEBUG BOUTONS ACCESSOIRES/LIVRAISON:`);
-                debugInfo.debugButtons.forEach(b => {
-                    console.log(`      • "${b.text}" id=${b.id || 'none'} startsWith=${b.startsWithAccessoires} includes=${b.includesAccessoiresPourV}`);
-                });
             }
             
             // Stats
