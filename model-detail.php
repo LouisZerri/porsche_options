@@ -252,6 +252,7 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                 <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
                 <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
                 <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
                 <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
                 <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction

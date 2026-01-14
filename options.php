@@ -1,6 +1,6 @@
 <?php
 /**
- * PORSCHE OPTIONS MANAGER v6.1 - Recherche d'options
+ * PORSCHE OPTIONS MANAGER v6.2 - Recherche d'options
  * Avec filtres par type et catégorie + affichage images
  */
 require_once 'config.php';
@@ -8,85 +8,72 @@ require_once 'config.php';
 $db = getDB();
 
 $search = $_GET['q'] ?? '';
-$typeFilter = $_GET['type'] ?? '';
 $categoryFilter = $_GET['cat'] ?? '';
+$typeFilter = $_GET['type'] ?? '';
 
 $options = [];
 $categories = [];
-$stats = [];
+$typesCounts = [];
 
 try {
-    // Récupérer les catégories disponibles
+    // Récupérer les catégories disponibles (basées sur les parent_name uniques)
     $categories = $db->query("
-        SELECT c.parent_name, c.name, COUNT(*) as count
+        SELECT c.name, COUNT(DISTINCT o.id) as count
         FROM p_categories c
         JOIN p_options o ON o.category_id = c.id
-        GROUP BY c.parent_name, c.name
-        ORDER BY c.parent_name, c.name
+        GROUP BY c.name
+        ORDER BY c.name
     ")->fetchAll();
     
-    // Stats par type
-    $stats = $db->query("
+    // Récupérer les types d'options avec comptage
+    $typesCounts = $db->query("
         SELECT option_type, COUNT(*) as count
         FROM p_options
         GROUP BY option_type
-    ")->fetchAll();
+        ORDER BY option_type
+    ")->fetchAll(PDO::FETCH_KEY_PAIR);
     
-    // Recherche
+    // Construire la requête de recherche
+    $sql = "
+        SELECT o.*, m.name as model_name, m.code as model_code, f.name as family_name, 
+               c.name as category_name, c.parent_name as parent_category
+        FROM p_options o
+        JOIN p_models m ON o.model_id = m.id
+        LEFT JOIN p_families f ON m.family_id = f.id
+        LEFT JOIN p_categories c ON o.category_id = c.id
+        WHERE 1=1
+    ";
+    $params = [];
+    
     if ($search && strlen($search) >= 2) {
-        $sql = "
-            SELECT o.*, m.name as model_name, m.code as model_code, f.name as family_name, 
-                   c.name as category_name, c.parent_name as parent_category
-            FROM p_options o
-            JOIN p_models m ON o.model_id = m.id
-            LEFT JOIN p_families f ON m.family_id = f.id
-            LEFT JOIN p_categories c ON o.category_id = c.id
-            WHERE (o.code LIKE ? OR o.name LIKE ?)
-        ";
-        $params = ["%$search%", "%$search%"];
-        
-        if ($typeFilter) {
-            $sql .= " AND o.option_type = ?";
-            $params[] = $typeFilter;
-        }
-        
-        $sql .= " ORDER BY o.option_type, c.parent_name, c.name, o.code LIMIT 500";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute($params);
-        $options = $stmt->fetchAll();
-    } elseif ($typeFilter || $categoryFilter) {
-        // Filtrer par type ou catégorie
-        $sql = "
-            SELECT o.*, m.name as model_name, m.code as model_code, f.name as family_name, 
-                   c.name as category_name, c.parent_name as parent_category
-            FROM p_options o
-            JOIN p_models m ON o.model_id = m.id
-            LEFT JOIN p_families f ON m.family_id = f.id
-            LEFT JOIN p_categories c ON o.category_id = c.id
-            WHERE 1=1
-        ";
-        $params = [];
-        
-        if ($typeFilter) {
-            $sql .= " AND o.option_type = ?";
-            $params[] = $typeFilter;
-        }
-        if ($categoryFilter) {
-            $sql .= " AND c.name = ?";
-            $params[] = $categoryFilter;
-        }
-        
-        $sql .= " ORDER BY c.parent_name, c.name, o.code LIMIT 500";
-        
+        $sql .= " AND (o.code LIKE ? OR o.name LIKE ?)";
+        $params[] = "%$search%";
+        $params[] = "%$search%";
+    }
+    
+    if ($categoryFilter) {
+        $sql .= " AND c.name = ?";
+        $params[] = $categoryFilter;
+    }
+    
+    if ($typeFilter) {
+        $sql .= " AND o.option_type = ?";
+        $params[] = $typeFilter;
+    }
+    
+    $sql .= " ORDER BY c.name, o.code LIMIT 500";
+    
+    // Exécuter seulement si recherche ou filtre
+    if ($search || $categoryFilter || $typeFilter) {
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $options = $stmt->fetchAll();
     }
+    
 } catch (PDOException $e) {
     $options = [];
     $categories = [];
-    $stats = [];
+    $typesCounts = [];
 }
 
 // Ordre des catégories comme sur le configurateur Porsche
@@ -142,17 +129,6 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
     }
     return $orderA - $orderB;
 });
-
-// Labels types
-$typeLabels = [
-    'color_ext' => '🎨 Couleurs Ext.',
-    'hood' => '🏠 Capotes',
-    'color_int' => '🛋️ Couleurs Int.',
-    'wheel' => '🛞 Jantes',
-    'seat' => '💺 Sièges',
-    'pack' => '📦 Packs',
-    'option' => '⚙️ Options'
-];
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -188,13 +164,15 @@ $typeLabels = [
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">Gestions des options des modèles Porsche</p>
+                    <p class="text-gray-500 text-sm">v6.2</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
                 <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
                 <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
                 <a href="options.php" class="text-black font-medium">Options</a>
+                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
                 <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">Extraction</a>
             </nav>
         </div>
@@ -203,19 +181,54 @@ $typeLabels = [
     <main class="max-w-7xl mx-auto px-6 py-8">
         <h2 class="text-2xl font-bold mb-6">Options & Couleurs</h2>
 
+        <!-- Filtres par TYPE d'option -->
+        <?php if (!empty($typesCounts)): ?>
+        <div class="mb-4">
+            <p class="text-sm text-gray-500 mb-2">Filtrer par type :</p>
+            <div class="flex flex-wrap gap-2">
+                <?php
+                $typeLabels = [
+                    'color_ext' => ['🎨', 'Couleurs Ext.'],
+                    'color_int' => ['🛋️', 'Couleurs Int.'],
+                    'hood' => ['🏠', 'Capotes'],
+                    'wheel' => ['🛞', 'Jantes'],
+                    'seat' => ['💺', 'Sièges'],
+                    'pack' => ['📦', 'Packs'],
+                    'option' => ['⚙️', 'Options']
+                ];
+                $typeOrder = ['color_ext', 'hood', 'wheel', 'color_int', 'seat', 'pack', 'option'];
+                foreach ($typeOrder as $type):
+                    if (!isset($typesCounts[$type])) continue;
+                    $count = $typesCounts[$type];
+                    $icon = $typeLabels[$type][0] ?? '⚙️';
+                    $label = $typeLabels[$type][1] ?? $type;
+                ?>
+                <a href="?type=<?= urlencode($type) ?>" 
+                   class="px-3 py-1.5 rounded text-sm <?= $typeFilter === $type ? 'bg-porsche-red text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+                    <?= $icon ?> <?= htmlspecialchars($label) ?> 
+                    <span class="<?= $typeFilter === $type ? 'text-red-200' : 'text-gray-400' ?>">(<?= $count ?>)</span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Filtres par catégorie -->
         <?php if (!empty($categories)): ?>
-        <div class="flex flex-wrap gap-2 mb-6">
-            <a href="options.php" class="px-4 py-2 rounded <?= !$categoryFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
-                Tous
-            </a>
-            <?php foreach ($categories as $cat): ?>
-            <a href="?cat=<?= urlencode($cat['name']) ?>" 
-               class="px-4 py-2 rounded <?= $categoryFilter === $cat['name'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
-                <?= htmlspecialchars($cat['name']) ?> 
-                <span class="text-gray-400">(<?= $cat['count'] ?>)</span>
-            </a>
-            <?php endforeach; ?>
+        <div class="mb-6">
+            <p class="text-sm text-gray-500 mb-2">Filtrer par catégorie :</p>
+            <div class="flex flex-wrap gap-2">
+                <a href="options.php" class="px-4 py-2 rounded <?= !$categoryFilter && !$typeFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+                    Tous
+                </a>
+                <?php foreach ($categories as $cat): ?>
+                <a href="?cat=<?= urlencode($cat['name']) ?>" 
+                   class="px-4 py-2 rounded <?= $categoryFilter === $cat['name'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+                    <?= htmlspecialchars($cat['name']) ?> 
+                    <span class="text-gray-400">(<?= $cat['count'] ?>)</span>
+                </a>
+                <?php endforeach; ?>
+            </div>
         </div>
         <?php endif; ?>
 
@@ -224,6 +237,9 @@ $typeLabels = [
             <div class="flex gap-4">
                 <?php if ($categoryFilter): ?>
                 <input type="hidden" name="cat" value="<?= htmlspecialchars($categoryFilter) ?>">
+                <?php endif; ?>
+                <?php if ($typeFilter): ?>
+                <input type="hidden" name="type" value="<?= htmlspecialchars($typeFilter) ?>">
                 <?php endif; ?>
                 <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" 
                        placeholder="Code ou nom (ex: PSM, Bose, Blanc...)"
@@ -286,32 +302,49 @@ $typeLabels = [
             </div>
             <?php endforeach; ?>
 
-        <?php elseif ($search || $typeFilter): ?>
+        <?php elseif ($search || $categoryFilter || $typeFilter): ?>
             <div class="border border-porsche-border rounded-lg p-12 text-center">
                 <p class="text-gray-500 text-lg">Aucun résultat</p>
             </div>
 
         <?php else: ?>
-            <!-- Catégories disponibles -->
-            <div class="border border-porsche-border rounded-lg">
-                <div class="p-4 border-b border-porsche-border">
-                    <h3 class="font-bold">Catégories disponibles</h3>
-                </div>
-                <?php if (empty($categories)): ?>
-                <div class="p-8 text-center text-gray-500">
-                    Aucune donnée. Lancez une extraction.
-                </div>
-                <?php else: ?>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
-                    <?php foreach ($categories as $cat): ?>
-                    <a href="?cat=<?= urlencode($cat['name']) ?>" 
-                       class="border border-porsche-border hover:shadow-md hover:border-gray-400 rounded-lg p-3 transition">
-                        <div class="font-medium"><?= htmlspecialchars($cat['name']) ?></div>
-                        <div class="text-gray-400 text-sm"><?= $cat['count'] ?> options</div>
+            <!-- Grille des catégories et types -->
+            <div class="border border-porsche-border rounded-lg p-6">
+                <h3 class="font-bold mb-4">Types d'options</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <?php
+                    $typeLabels = [
+                        'color_ext' => ['🎨', 'Couleurs Extérieures'],
+                        'hood' => ['🏠', 'Capotes'],
+                        'wheel' => ['🛞', 'Jantes'],
+                        'color_int' => ['🛋️', 'Couleurs Intérieures'],
+                        'seat' => ['💺', 'Sièges'],
+                        'pack' => ['📦', 'Packs'],
+                        'option' => ['⚙️', 'Options générales']
+                    ];
+                    foreach ($typeLabels as $type => $info):
+                        $count = $typesCounts[$type] ?? 0;
+                        if ($count === 0) continue;
+                    ?>
+                    <a href="?type=<?= urlencode($type) ?>" 
+                       class="p-4 border border-porsche-border rounded-lg hover:bg-porsche-gray transition">
+                        <div class="text-2xl mb-1"><?= $info[0] ?></div>
+                        <div class="font-medium"><?= $info[1] ?></div>
+                        <div class="text-gray-500 text-sm"><?= $count ?> options</div>
                     </a>
                     <?php endforeach; ?>
                 </div>
-                <?php endif; ?>
+                
+                <h3 class="font-bold mb-4">Catégories disponibles</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <?php foreach ($categories as $cat): ?>
+                    <a href="?cat=<?= urlencode($cat['name']) ?>" 
+                       class="p-4 border border-porsche-border rounded-lg hover:bg-porsche-gray transition">
+                        <div class="font-medium"><?= htmlspecialchars($cat['name']) ?></div>
+                        <div class="text-gray-500 text-sm"><?= $cat['count'] ?> options</div>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
             </div>
         <?php endif; ?>
     </main>

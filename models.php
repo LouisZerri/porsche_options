@@ -87,8 +87,10 @@ try {
             </div>
             <nav class="flex items-center gap-6 text-sm">
                 <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-black font-medium">Modèles</a>
+                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
                 <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
                 <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
