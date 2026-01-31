@@ -1,6 +1,6 @@
 /**
- * PORSCHE OPTIONS EXTRACTOR v6.2 - CLIENT FEEDBACK FIX
- * 
+ * PORSCHE OPTIONS EXTRACTOR v6.3 - INFOBULLES
+ *
  * Corrections v6.2:
  * 1. ✅ Prix véhicule: extraction précise du "Prix de base"
  * 2. ✅ Prix jantes: prix individuels par option (pas prix catégorie)
@@ -9,6 +9,9 @@
  * 5. ✅ Sous-catégories: H3 complets stockés pour chaque option
  * 6. ✅ Équipement de série + données techniques
  * 7. ✅ Support extraction DE pour dictionnaire
+ *
+ * Ajouts v6.3:
+ * 8. ✅ Extraction des infobulles (descriptions) via --fetch-tooltips
  */
 
 const mysql = require('mysql2/promise');
@@ -2335,6 +2338,102 @@ class PorscheExtractor {
     }
     
     /**
+     * EXTRACTION DES INFOBULLES (descriptions des options)
+     * Navigation directe vers chaque page /option/{code} - simple et fiable
+     */
+    async extractTooltips(modelCode) {
+        console.log(`\n📝 Extraction des descriptions pour ${modelCode}...`);
+
+        // Récupérer les codes d'options depuis la BDD
+        const [options] = await this.db.pool.query(
+            `SELECT code FROM p_options WHERE model_id = (SELECT id FROM p_models WHERE code = ?) AND (description IS NULL OR description = '')`,
+            [modelCode]
+        );
+
+        if (options.length === 0) {
+            console.log('   ✓ Toutes les options ont déjà une description');
+            return;
+        }
+
+        console.log(`   📋 ${options.length} options à traiter`);
+
+        const page = await this.context.newPage();
+        const descriptions = [];
+        let cookiesAccepted = false;
+
+        try {
+            for (let i = 0; i < options.length; i++) {
+                const code = options[i].code;
+
+                try {
+                    const url = `${CONFIG.baseUrl}/${CONFIG.locale}/mode/model/${modelCode}/option/${code}`;
+                    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+                    // Cookies une seule fois
+                    if (!cookiesAccepted) {
+                        try {
+                            await page.getByRole('button', { name: /Tout accepter/i }).click({ timeout: 2000 });
+                            cookiesAccepted = true;
+                        } catch (e) { cookiesAccepted = true; }
+                    }
+
+                    await page.waitForTimeout(800);
+
+                    // Extraire la description
+                    const content = await page.evaluate(() => {
+                        // Chercher dans le sheet qui contient un h2 (avec ou sans image)
+                        const sheets = document.querySelectorAll('icc-p-sheet');
+                        for (const sheet of sheets) {
+                            const h2 = sheet.querySelector('h2');
+                            if (h2) {
+                                // Chercher la description
+                                const descDiv = sheet.querySelector('[class*="py-fluid-xs"][class*="prose-text-sm"]')
+                                              || sheet.querySelector('[class*="prose-text-sm"][class*="break-words"]');
+                                if (descDiv) {
+                                    const text = descDiv.innerText?.trim();
+                                    if (text && text.length > 15) return text;
+                                }
+                            }
+                        }
+                        return null;
+                    });
+
+                    if (content && content.length > 15) {
+                        descriptions.push({ code, description: content.substring(0, 1000) });
+                    }
+
+                    // Log progression
+                    if ((i + 1) % 10 === 0 || i === options.length - 1) {
+                        console.log(`   ⏳ ${i + 1}/${options.length} (${descriptions.length} descriptions)`);
+                    }
+
+                } catch (e) {
+                    // Ignorer les erreurs et continuer
+                }
+            }
+
+            console.log(`   ✓ ${descriptions.length} descriptions extraites`);
+
+            // Mettre à jour la BDD
+            if (descriptions.length > 0) {
+                console.log('   💾 Mise à jour en BDD...');
+                let updated = 0;
+                for (const { code, description } of descriptions) {
+                    const result = await this.db.pool.query(
+                        `UPDATE p_options SET description = ? WHERE code = ?`,
+                        [description, code]
+                    );
+                    if (result[0].affectedRows > 0) updated++;
+                }
+                console.log(`   ✓ ${updated} options mises à jour`);
+            }
+
+        } finally {
+            await page.close();
+        }
+    }
+
+    /**
      * POINT 7: Extraire les noms allemands depuis le configurateur DE
      */
     async fetchGermanNames(modelCode) {
@@ -2458,7 +2557,7 @@ async function main() {
     if (args.length === 0) {
         console.log(`
 ╔══════════════════════════════════════════════════════════════════════════╗
-║       PORSCHE OPTIONS EXTRACTOR v6.2 - CLIENT FEEDBACK FIX               ║
+║       PORSCHE OPTIONS EXTRACTOR v6.3 - INFOBULLES                        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 Usage:
@@ -2467,15 +2566,19 @@ Usage:
   node porsche_extractor_v6.2.js --model <code> --visible  Mode visible
   node porsche_extractor_v6.2.js --model <code> --debug    Mode debug
   node porsche_extractor_v6.2.js --model <code> --fetch-de Extraire aussi noms DE
+  node porsche_extractor_v6.2.js --model <code> --fetch-tooltips  Extraire infobulles
 
 Corrections v6.2 (retour client):
   1. ✅ Prix véhicule: extraction précise du prix de base
   2. ✅ Prix jantes: prix individuels par option
-  3. ✅ Prix teintes INT: prix individuels par option  
+  3. ✅ Prix teintes INT: prix individuels par option
   4. ✅ Sièges: modèles de sièges + options
   5. ✅ Sous-catégories: H3 complets
   6. ✅ Stats Dashboard: comparaisons, doublons, Exclusive
   7. ✅ Dictionnaire FR/DE: colonne name_de
+
+Ajouts v6.3:
+  8. ✅ Infobulles: --fetch-tooltips extrait les descriptions
 `);
         return;
     }
@@ -2499,18 +2602,25 @@ Corrections v6.2 (retour client):
     const visible = args.includes('--visible');
     const debug = args.includes('--debug');
     const fetchDe = args.includes('--fetch-de');
-    
+    const fetchTooltips = args.includes('--fetch-tooltips');
+
     await db.connect();
-    
+
     const extractor = new PorscheExtractor(db);
     await extractor.init(!visible);
-    
+
     console.log(`🚗 Modèle(s): ${modelCodes.join(', ')}`);
     if (fetchDe) console.log('🇩🇪 Extraction noms allemands activée');
-    
+    if (fetchTooltips) console.log('📝 Extraction infobulles activée');
+
     for (const code of modelCodes) {
         await extractor.extractModel(code.trim(), debug);
-        
+
+        // Extraire les infobulles si demandé
+        if (fetchTooltips) {
+            await extractor.extractTooltips(code.trim());
+        }
+
         // Extraire les noms allemands si demandé
         if (fetchDe) {
             await extractor.fetchGermanNames(code.trim());

@@ -232,6 +232,11 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
         .collapsed .section-content { display: none; }
         .section-header:hover { background-color: #f7f7f7; }
         .exclusive-badge { background: linear-gradient(135deg, #d4af37, #f4e4bc); }
+        .description-tooltip { max-width: 400px; }
+        .info-icon { cursor: pointer; transition: all 0.2s; }
+        .info-icon:hover { transform: scale(1.1); }
+        .description-expanded { animation: slideDown 0.2s ease-out; }
+        @keyframes slideDown { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 200px; } }
     </style>
 </head>
 <body class="bg-white text-black min-h-screen">
@@ -417,7 +422,13 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                             <span class="text-2xl">🎨</span>
                         </div>
                         <?php endif; ?>
-                        <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($color['code']) ?></p>
+                        <div class="flex items-center gap-1 mb-1">
+                            <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block"><?= htmlspecialchars($color['code']) ?></p>
+                            <?php if (!empty($color['description'])): ?>
+                            <button type="button" onclick="showDescription('<?= htmlspecialchars($color['code']) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>', <?= htmlspecialchars(json_encode($color['description']), ENT_QUOTES) ?>)"
+                                    class="info-icon w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">i</button>
+                            <?php endif; ?>
+                        </div>
                         <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($color['name']) ?></p>
                         <p class="text-sm <?= $color['is_standard'] ? 'text-green-600' : 'text-black font-medium' ?>">
                             <?= $color['is_standard'] ? 'Série' : ($color['price'] ? formatPrice($color['price']) : '-') ?>
@@ -426,7 +437,7 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                     <?php $i++; endforeach; ?>
                 </div>
                 <?php endif; ?>
-                
+
                 <?php if (!empty($hoods)): ?>
                 <!-- Sous-section Capotes -->
                 <div class="mt-4 pt-4 border-t border-porsche-border">
@@ -461,7 +472,13 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                                 <span class="text-2xl">🏠</span>
                             </div>
                             <?php endif; ?>
-                            <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($hood['code']) ?></p>
+                            <div class="flex items-center gap-1 mb-1">
+                                <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block"><?= htmlspecialchars($hood['code']) ?></p>
+                                <?php if (!empty($hood['description'])): ?>
+                                <button type="button" onclick="showDescription('<?= htmlspecialchars($hood['code']) ?>', '<?= htmlspecialchars(addslashes($hood['name'])) ?>', <?= htmlspecialchars(json_encode($hood['description']), ENT_QUOTES) ?>)"
+                                        class="info-icon w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">i</button>
+                                <?php endif; ?>
+                            </div>
                             <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($hood['name']) ?></p>
                             <p class="text-sm <?= $hood['is_standard'] ? 'text-green-600' : 'text-black font-medium' ?>">
                                 <?= $hood['is_standard'] ? 'Série' : ($hood['price'] ? formatPrice($hood['price']) : '-') ?>
@@ -516,7 +533,13 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                         <?php if ($jante['is_exclusive_manufaktur'] ?? false): ?>
                         <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full mb-1 inline-block">Exclusive Manufaktur</span>
                         <?php endif; ?>
-                        <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($jante['code']) ?></p>
+                        <div class="flex items-center gap-1 mb-1">
+                            <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block"><?= htmlspecialchars($jante['code']) ?></p>
+                            <?php if (!empty($jante['description'])): ?>
+                            <button type="button" onclick="showDescription('<?= htmlspecialchars($jante['code']) ?>', '<?= htmlspecialchars(addslashes($jante['name'])) ?>', <?= htmlspecialchars(json_encode($jante['description']), ENT_QUOTES) ?>)"
+                                    class="info-icon w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">i</button>
+                            <?php endif; ?>
+                        </div>
                         <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($jante['name']) ?></p>
                         <?php if (!empty($jante['sub_category'])): ?>
                         <p class="text-xs text-gray-400 mb-1"><?= htmlspecialchars($jante['sub_category']) ?></p>
@@ -576,7 +599,13 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                             </div>
                             <?php endif; ?>
                             <div>
-                                <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($color['code']) ?></p>
+                                <div class="flex items-center gap-1 mb-1">
+                                    <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block"><?= htmlspecialchars($color['code']) ?></p>
+                                    <?php if (!empty($color['description'])): ?>
+                                    <button type="button" onclick="showDescription('<?= htmlspecialchars($color['code']) ?>', '<?= htmlspecialchars(addslashes($color['name'])) ?>', <?= htmlspecialchars(json_encode($color['description']), ENT_QUOTES) ?>)"
+                                            class="info-icon w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">i</button>
+                                    <?php endif; ?>
+                                </div>
                                 <p class="font-medium"><?= htmlspecialchars($color['name']) ?></p>
                             </div>
                         </div>
@@ -640,7 +669,13 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                         <?php if ($seat['is_exclusive_manufaktur'] ?? false): ?>
                         <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full mb-1 inline-block">Exclusive Manufaktur</span>
                         <?php endif; ?>
-                        <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block mb-1"><?= htmlspecialchars($seat['code']) ?></p>
+                        <div class="flex items-center gap-1 mb-1">
+                            <p class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded inline-block"><?= htmlspecialchars($seat['code']) ?></p>
+                            <?php if (!empty($seat['description'])): ?>
+                            <button type="button" onclick="showDescription('<?= htmlspecialchars($seat['code']) ?>', '<?= htmlspecialchars(addslashes($seat['name'])) ?>', <?= htmlspecialchars(json_encode($seat['description']), ENT_QUOTES) ?>)"
+                                    class="info-icon w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">i</button>
+                            <?php endif; ?>
+                        </div>
                         <p class="font-medium text-sm mb-2 leading-tight"><?= htmlspecialchars($seat['name']) ?></p>
                         <?php if (!empty($seat['sub_category'])): ?>
                         <p class="text-xs text-gray-400 mb-1"><?= htmlspecialchars($seat['sub_category']) ?></p>
@@ -701,12 +736,18 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                                 <?php else: ?>
                                 <div class="w-16 h-12 rounded border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs">—</div>
                                 <?php endif; ?>
-                                <div>
+                                <div class="flex items-center gap-2">
                                     <?php if ($opt['is_exclusive_manufaktur'] ?? false): ?>
-                                    <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full mr-2">Exclusive Manufaktur</span>
+                                    <span class="text-xs exclusive-badge text-amber-800 px-2 py-0.5 rounded-full">Exclusive Manufaktur</span>
                                     <?php endif; ?>
                                     <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"><?= htmlspecialchars($opt['code']) ?></span>
-                                    <span class="text-sm ml-2"><?= htmlspecialchars($opt['name']) ?></span>
+                                    <span class="text-sm"><?= htmlspecialchars($opt['name']) ?></span>
+                                    <?php if (!empty($opt['description'])): ?>
+                                    <button type="button" onclick="showDescription('<?= htmlspecialchars($opt['code']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>', <?= htmlspecialchars(json_encode($opt['description']), ENT_QUOTES) ?>)"
+                                            class="info-icon w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600" title="Voir la description">
+                                        i
+                                    </button>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <div class="flex items-center gap-4">
@@ -772,6 +813,22 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
         </div>
     </div>
 
+    <!-- Description Modal -->
+    <div id="descriptionModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4" onclick="closeDescriptionModal(event)">
+        <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-porsche-border flex items-center justify-between bg-porsche-gray">
+                <div>
+                    <span id="descModal-code" class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"></span>
+                    <span id="descModal-name" class="text-sm font-medium ml-2"></span>
+                </div>
+                <button onclick="closeDescriptionModal()" class="text-gray-500 hover:text-black text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[60vh]">
+                <p id="descModal-text" class="text-gray-700 leading-relaxed whitespace-pre-line"></p>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Lightbox functions
         function openLightbox(src, caption, colorsOrGradient = false) {
@@ -832,16 +889,40 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
         // Recherche
         document.getElementById('searchOptions').addEventListener('input', function(e) {
             const search = e.target.value.toLowerCase();
-            
+
             document.querySelectorAll('.option-row').forEach(row => {
                 const text = row.dataset.search || '';
                 row.style.display = text.includes(search) ? '' : 'none';
             });
-            
+
             document.querySelectorAll('.option-section').forEach(section => {
                 const visibleRows = section.querySelectorAll('.option-row:not([style*="display: none"])');
                 section.style.display = visibleRows.length > 0 ? '' : 'none';
             });
+        });
+
+        // Description modal
+        function showDescription(code, name, description) {
+            const modal = document.getElementById('descriptionModal');
+            document.getElementById('descModal-code').textContent = code;
+            document.getElementById('descModal-name').textContent = name;
+            document.getElementById('descModal-text').textContent = description;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDescriptionModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            const modal = document.getElementById('descriptionModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = '';
+        }
+
+        // Close on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeDescriptionModal();
         });
     </script>
 </body>

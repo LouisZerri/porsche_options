@@ -98,9 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
         } elseif ($action === 'extract_model' && !empty($_POST['model'])) {
             $model = $_POST['model'];
+            $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
             // Mode SYNCHRONE pour voir le résultat directement
-            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s 2>&1',
-                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model));
+            $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
+            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s%s 2>&1',
+                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag);
             
             file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
             
@@ -113,9 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
         } elseif ($action === 'extract_model_async' && !empty($_POST['model'])) {
             $model = $_POST['model'];
+            $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
             // Mode ASYNCHRONE (arrière-plan)
-            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s > %s 2>&1 & echo $!',
-                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), escapeshellarg($logFile));
+            $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
+            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s%s > %s 2>&1 & echo $!',
+                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag, escapeshellarg($logFile));
             $pid = trim(shell_exec($cmd));
             if ($pid && is_numeric($pid)) {
                 file_put_contents($lockFile, $pid);
@@ -278,6 +282,12 @@ try {
                             Trouvez le code dans l'URL du configurateur Porsche<br>
                             Ex: configurator.porsche.com/.../model/<strong>982850</strong>
                         </p>
+                        <label class="flex items-center gap-2 mb-3 cursor-pointer">
+                            <input type="checkbox" name="fetch_tooltips" value="1"
+                                   class="w-4 h-4 accent-porsche-red rounded border-porsche-border"
+                                   <?= $isRunning ? 'disabled' : '' ?>>
+                            <span class="text-sm text-gray-700">Extraire les infobulles (descriptions)</span>
+                        </label>
                         <button type="submit" class="w-full bg-porsche-red hover:bg-red-700 text-white py-2 rounded transition text-sm" <?= $isRunning ? 'disabled' : '' ?>>
                             Extraire (~30s)
                         </button>
@@ -331,6 +341,8 @@ try {
                         <p>cd extractor</p>
                         <p>node porsche_extractor_v6.js --init</p>
                         <p>node porsche_extractor_v6.js --model 982850</p>
+                        <p class="text-gray-500"># Avec infobulles:</p>
+                        <p>node porsche_extractor_v6.js --model 982850 --fetch-tooltips</p>
                         <p class="text-gray-500"># Avec debug images:</p>
                         <p>node porsche_extractor_v6.js --model 982850 --debug-img</p>
                         <p>node porsche_extractor_v6.js --list</p>

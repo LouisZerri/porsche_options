@@ -152,6 +152,8 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
     </script>
     <style>
         body { font-family: 'PorscheNext', 'Segoe UI', Arial, sans-serif; }
+        .info-icon { cursor: pointer; transition: all 0.2s; }
+        .info-icon:hover { transform: scale(1.1); }
     </style>
 </head>
 <body class="bg-white text-black min-h-screen">
@@ -285,6 +287,10 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                             ?>
                         </span>
                         <span class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded flex-shrink-0"><?= htmlspecialchars($opt['code']) ?></span>
+                        <?php if (!empty($opt['description'])): ?>
+                        <button type="button" onclick="showDescription('<?= htmlspecialchars($opt['code']) ?>', '<?= htmlspecialchars(addslashes($opt['name'])) ?>', <?= htmlspecialchars(json_encode($opt['description']), ENT_QUOTES) ?>)"
+                                class="info-icon w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600 ml-2 flex-shrink-0" title="Voir la description">i</button>
+                        <?php endif; ?>
                         <span class="flex-1 ml-3 truncate"><?= htmlspecialchars($opt['name']) ?></span>
                         <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6 flex-shrink-0">
                             <?= htmlspecialchars($opt['model_name']) ?>
@@ -348,5 +354,45 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
             </div>
         <?php endif; ?>
     </main>
+
+    <!-- Modal Description -->
+    <div id="descriptionModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4" onclick="closeDescriptionModal(event)">
+        <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-porsche-border flex items-center justify-between bg-porsche-gray">
+                <div>
+                    <span id="descModal-code" class="font-mono text-xs font-bold bg-black text-white px-2 py-1 rounded"></span>
+                    <span id="descModal-name" class="text-sm font-medium ml-2"></span>
+                </div>
+                <button onclick="closeDescriptionModal()" class="text-gray-500 hover:text-black text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[60vh]">
+                <p id="descModal-text" class="text-gray-700 leading-relaxed whitespace-pre-line"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showDescription(code, name, description) {
+            document.getElementById('descModal-code').textContent = code;
+            document.getElementById('descModal-name').textContent = name;
+            document.getElementById('descModal-text').textContent = description;
+            const modal = document.getElementById('descriptionModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDescriptionModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            const modal = document.getElementById('descriptionModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeDescriptionModal();
+        });
+    </script>
 </body>
 </html>
