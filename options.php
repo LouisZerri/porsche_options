@@ -166,7 +166,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                 </svg>
                 <div>
                     <h1 class="text-xl font-bold text-black">Porsche Options Manager</h1>
-                    <p class="text-gray-500 text-sm">v6.2</p>
+                    <p class="text-gray-500 text-sm">Toutes les options disponibles</p>
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">

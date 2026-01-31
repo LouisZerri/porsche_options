@@ -1,17 +1,11 @@
 /**
- * PORSCHE OPTIONS EXTRACTOR v6.3 - INFOBULLES
+ * PORSCHE OPTIONS EXTRACTOR
  *
- * Corrections v6.2:
- * 1. ✅ Prix véhicule: extraction précise du "Prix de base"
- * 2. ✅ Prix jantes: prix individuels par option (pas prix catégorie)
- * 3. ✅ Prix teintes INT: prix individuels par option
- * 4. ✅ Sièges: extraction des modèles de sièges + options
- * 5. ✅ Sous-catégories: H3 complets stockés pour chaque option
- * 6. ✅ Équipement de série + données techniques
- * 7. ✅ Support extraction DE pour dictionnaire
- *
- * Ajouts v6.3:
- * 8. ✅ Extraction des infobulles (descriptions) via --fetch-tooltips
+ * Extracteur de données du configurateur Porsche
+ * - Options, couleurs, jantes, sièges, packs
+ * - Prix individuels et équipements de série
+ * - Données techniques et infobulles
+ * - Support multilingue (FR/DE)
  */
 
 const mysql = require('mysql2/promise');
@@ -37,7 +31,7 @@ const CONFIG = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// BASE DE DONNÉES v6.1
+// BASE DE DONNÉES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PorscheDB {
@@ -71,7 +65,7 @@ class PorscheDB {
         await this.pool.query(`CREATE DATABASE \`${DB_CONFIG.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
         await this.pool.query(`USE \`${DB_CONFIG.database}\``);
         
-        console.log('📋 Création des tables v6.1...\n');
+        console.log('📋 Création des tables...\n');
         
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_families (
             id INT AUTO_INCREMENT PRIMARY KEY, 
@@ -126,7 +120,7 @@ class PorscheDB {
             FOREIGN KEY (category_id) REFERENCES p_categories(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         
-        console.log('✅ Base de données v6.1 réinitialisée avec succès !');
+        console.log('✅ Base de données réinitialisée avec succès !');
     }
     
     async getOrCreateFamily(code, name) {
@@ -225,7 +219,7 @@ class PorscheDB {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EXTRACTEUR v6.1
+// EXTRACTEUR
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PorscheExtractor {
@@ -265,7 +259,7 @@ class PorscheExtractor {
     
     async extractModel(modelCode, debugMode = false) {
         console.log(`\n${'═'.repeat(70)}`);
-        console.log(`📦 EXTRACTION v6.1: ${modelCode}${debugMode ? ' (DEBUG)' : ''}`);
+        console.log(`📦 EXTRACTION: ${modelCode}${debugMode ? ' (DEBUG)' : ''}`);
         console.log(`${'═'.repeat(70)}\n`);
         
         const page = await this.context.newPage();
@@ -322,11 +316,11 @@ class PorscheExtractor {
                 await page.waitForTimeout(1000);
             } catch (e) {}
             
-            // Extraire nom et prix de base - CORRIGÉ v6.2
+            // Extraire nom et prix de base
             const modelName = await page.locator('h1').first().textContent() || modelCode;
             console.log(`📋 ${modelName.trim()}`);
             
-            // POINT 1 FIX: Chercher spécifiquement le prix de base, pas le premier prix trouvé
+            // Chercher le prix de base du véhicule
             const basePrice = await page.evaluate(() => {
                 // Méthode 1: Chercher dans la section "Prix" ou "Prix de base"
                 const priceLabels = document.querySelectorAll('*');
@@ -380,7 +374,7 @@ class PorscheExtractor {
             console.log(`💰 ${basePrice?.toLocaleString('fr-FR')} €`);
             
             // ═══════════════════════════════════════════════════════════════
-            // POINT 6: Extraire données techniques et équipement de série
+            // DONNÉES TECHNIQUES ET ÉQUIPEMENTS DE SÉRIE
             // ═══════════════════════════════════════════════════════════════
             console.log('\n📊 Extraction des données techniques et équipements de série...');
             
@@ -997,9 +991,8 @@ class PorscheExtractor {
                     return null;
                 }
                 
-                // POINT 4: Approche TOP-DOWN pour Exclusive Manufaktur
-                // On trouve d'abord TOUS les labels "Exclusive Manufaktur" sur la page
-                // Puis on trouve l'input/link le plus proche pour chacun
+                // Détection Exclusive Manufaktur (approche top-down)
+                // Trouve d'abord les labels puis les inputs associés
                 const exclusiveOptionCodes = new Set();
                 const exclusiveOptionNames = new Map();
                 
@@ -1096,7 +1089,7 @@ class PorscheExtractor {
                         debugInfo.sectionTypes.push({ h2: h2Text, type: baseType });
                     }
                     
-                    // DEBUG POINT 4: Si c'est la section Sièges, loguer tout ce qu'on trouve
+                    // Debug: Si c'est la section Sièges, loguer les éléments trouvés
                     if (baseType === 'seat') {
                         debugInfo.seatSection = debugInfo.seatSection || { inputs: [], links: [], optionLinks: [], h3s: [] };
                         section.querySelectorAll('input[name="options"]').forEach(input => {
@@ -1141,7 +1134,7 @@ class PorscheExtractor {
                         if (!code || !name || seen.has(code)) return;
                         seen.add(code);
                         
-                        // POINT 5: Trouver H3 pour sous-catégorie
+                        // Trouver H3 pour sous-catégorie
                         let parentH3 = null;
                         let h3Price = null;
                         
@@ -1195,7 +1188,7 @@ class PorscheExtractor {
                             if (parentH3) break;
                         }
                         
-                        // DEBUG POINT 1: Track interior subcategories
+                        // Debug: Track interior subcategories
                         if (baseType === 'color_int' && parentH3) {
                             if (!debugInfo.point1_intSubCategories[parentH3]) {
                                 debugInfo.point1_intSubCategories[parentH3] = { count: 0, price: h3Price };
@@ -1203,7 +1196,7 @@ class PorscheExtractor {
                             debugInfo.point1_intSubCategories[parentH3].count++;
                         }
                         
-                        // DEBUG POINT 3: Capture HTML structure for color_int
+                        // Debug: Capture HTML structure for color_int
                         if (baseType === 'color_int') {
                             debugInfo.colorIntDebug = debugInfo.colorIntDebug || [];
                             let htmlDebug = { code, name: name.substring(0, 30), levels: [], inputAttrs: {} };
@@ -1236,14 +1229,14 @@ class PorscheExtractor {
                             debugInfo.colorIntDebug.push(htmlDebug);
                         }
                         
-                        // POINT 4: Détecter Exclusive Manufaktur sur TOUS les types d'options (y compris inputs)
+                        // Détecter Exclusive Manufaktur
                         const exclusiveInfo = findExclusiveManufaktur(input, code);
                         
                         if (exclusiveInfo.isExclusive) {
                             debugInfo.point4_exclusive.push({ code, realName: exclusiveInfo.realName, source: 'input' });
                         }
                         
-                        // POINT 2: Détecter les capotes
+                        // Détecter les capotes
                         let type = baseType;
                         const h3Lower = (parentH3 || '').toLowerCase();
                         if (baseType === 'color_ext' && (h3Lower.includes('capote') || h3Lower.includes('toit') || h3Lower.includes('soft top'))) {
@@ -1251,12 +1244,11 @@ class PorscheExtractor {
                             debugInfo.point2_hoods.push({ code, name, h3: parentH3 });
                         }
                         
-                        // Prix - CORRIGÉ v6.2: chercher le prix INDIVIDUEL de l'option
+                        // Chercher le prix individuel de l'option
                         let price = null;
                         let isStandard = false;
                         
-                        // v6.2 FIX: Chercher le prix proche de l'input
-                        // IMPORTANT: Chercher d'abord un prix explicite, puis seulement "de série"
+                        // Chercher le prix proche de l'input
                         let el = input;
                         let priceFound = false;
                         let foundSerieText = false;
@@ -1396,7 +1388,7 @@ class PorscheExtractor {
                             isStandard = true;
                         }
                         
-                        // DEBUG v6.2: Log pour les jantes et couleurs int
+                        // Debug: Log pour les jantes et couleurs intérieures
                         if (baseType === 'wheel' || baseType === 'color_int') {
                             debugInfo[`price_debug_${baseType}`] = debugInfo[`price_debug_${baseType}`] || [];
                             debugInfo[`price_debug_${baseType}`].push({
@@ -1444,7 +1436,7 @@ class PorscheExtractor {
                         if (seen.has(code)) return;
                         seen.add(code);
                         
-                        // POINT 4: Détecter Exclusive Manufaktur
+                        // Détecter Exclusive Manufaktur
                         const exclusiveInfo = findExclusiveManufaktur(link, code);
                         
                         if (exclusiveInfo.isExclusive) {
@@ -2068,19 +2060,19 @@ class PorscheExtractor {
             }
             
             // ═══════════════════════════════════════════════════════════════
-            // DEBUG OUTPUT v6.2 - Vérification des 7 points client
+            // DEBUG OUTPUT - Vérification de l'extraction
             // ═══════════════════════════════════════════════════════════════
             console.log('\n' + '═'.repeat(70));
-            console.log('🔍 DEBUG v6.2 - Vérification des 7 points client:');
+            console.log('🔍 DEBUG - Vérification de l\'extraction:');
             console.log('═'.repeat(70));
             
-            // POINT 1: Prix véhicule
-            console.log('\n📍 POINT 1 - Prix du véhicule:');
+            // Prix véhicule
+            console.log('\n📍 Prix du véhicule:');
             console.log(`   💰 Prix extrait: ${basePrice?.toLocaleString('fr-FR')} €`);
             console.log(`   ⚠️  Vérifier sur le configurateur si ce prix est correct!`);
             
-            // POINT 2: Prix des jantes
-            console.log('\n📍 POINT 2 - Prix des jantes (individuels):');
+            // Prix des jantes
+            console.log('\n📍 Prix des jantes:');
             const wheels = allOptions.filter(o => o.type === 'wheel');
             if (wheels.length > 0) {
                 wheels.forEach(w => {
@@ -2093,8 +2085,8 @@ class PorscheExtractor {
                 console.log('   [DEBUG price_debug_wheel]:', JSON.stringify(debugInfo.price_debug_wheel.slice(0, 5), null, 2));
             }
             
-            // POINT 3: Prix couleurs intérieures
-            console.log('\n📍 POINT 3 - Prix couleurs intérieures (individuels):');
+            // Prix couleurs intérieures
+            console.log('\n📍 Prix couleurs intérieures:');
             const intColors = allOptions.filter(o => o.type === 'color_int');
             if (intColors.length > 0) {
                 intColors.forEach(c => {
@@ -2127,8 +2119,8 @@ class PorscheExtractor {
                 });
             }
             
-            // POINT 4: Sièges (modèles + options)
-            console.log('\n📍 POINT 4 - Sièges (modèles et options):');
+            // Sièges
+            console.log('\n📍 Sièges (modèles et options):');
             const seats = allOptions.filter(o => o.type === 'seat');
             if (seats.length > 0) {
                 seats.forEach(s => {
@@ -2182,8 +2174,8 @@ class PorscheExtractor {
                 });
             }
             
-            // POINT 5: Sous-catégories
-            console.log('\n📍 POINT 5 - Sous-catégories (H3):');
+            // Sous-catégories
+            console.log('\n📍 Sous-catégories:');
             const subCategories = [...new Set(allOptions.map(o => o.subCategory).filter(Boolean))];
             if (subCategories.length > 0) {
                 console.log(`   ✓ ${subCategories.length} sous-catégories trouvées:`);
@@ -2215,8 +2207,8 @@ class PorscheExtractor {
                 });
             }
             
-            // POINT 6: Stats pour Dashboard (à implémenter côté PHP)
-            console.log('\n📍 POINT 6 - Stats pour Dashboard:');
+            // Stats pour Dashboard
+            console.log('\n📍 Statistiques:');
             const exclusiveCount = allOptions.filter(o => o.isExclusiveManufaktur).length;
             const standardCount = allOptions.filter(o => o.isStandard).length;
             const uniqueCodes = [...new Set(allOptions.map(o => o.code))];
@@ -2226,8 +2218,8 @@ class PorscheExtractor {
             console.log(`   📊 De série: ${standardCount}`);
             console.log(`   📊 Catégories: ${[...new Set(allOptions.map(o => o.category))].length}`);
             
-            // POINT 7: Préparation dictionnaire DE
-            console.log('\n📍 POINT 7 - Dictionnaire DE:');
+            // Dictionnaire multilingue
+            console.log('\n📍 Dictionnaire DE:');
             console.log('   ℹ️ Colonne name_de ajoutée à la table p_options');
             console.log('   ℹ️ Utiliser --locale de-DE pour extraire les noms allemands');
             
@@ -2260,7 +2252,7 @@ class PorscheExtractor {
                 });
             }
             
-            // POINT 6 déjà affiché plus haut (données techniques)
+            // Données techniques affichées plus haut
             
             // DEBUG supplémentaire
             console.log('\n   📍 DEBUG - Structure HTML:');
@@ -2324,7 +2316,7 @@ class PorscheExtractor {
             await this.db.updateModelStats(modelId);
             
             console.log(`\n${'═'.repeat(70)}`);
-            console.log(`✅ TERMINÉ v6.2: ${allOptions.length} éléments`);
+            console.log(`✅ TERMINÉ: ${allOptions.length} éléments`);
             console.log(`${'═'.repeat(70)}`);
             
             return allOptions.length;
@@ -2338,13 +2330,12 @@ class PorscheExtractor {
     }
     
     /**
-     * EXTRACTION DES INFOBULLES (descriptions des options)
-     * Navigation directe vers chaque page /option/{code} - simple et fiable
+     * Extraction des infobulles (descriptions des options)
      */
     async extractTooltips(modelCode) {
         console.log(`\n📝 Extraction des descriptions pour ${modelCode}...`);
+        const startTime = Date.now();
 
-        // Récupérer les codes d'options depuis la BDD
         const [options] = await this.db.pool.query(
             `SELECT code FROM p_options WHERE model_id = (SELECT id FROM p_models WHERE code = ?) AND (description IS NULL OR description = '')`,
             [modelCode]
@@ -2358,6 +2349,17 @@ class PorscheExtractor {
         console.log(`   📋 ${options.length} options à traiter`);
 
         const page = await this.context.newPage();
+
+        // Bloquer les images, CSS, fonts pour accélérer
+        await page.route('**/*', route => {
+            const type = route.request().resourceType();
+            if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
+                route.abort();
+            } else {
+                route.continue();
+            }
+        });
+
         const descriptions = [];
         let cookiesAccepted = false;
 
@@ -2369,7 +2371,6 @@ class PorscheExtractor {
                     const url = `${CONFIG.baseUrl}/${CONFIG.locale}/mode/model/${modelCode}/option/${code}`;
                     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-                    // Cookies une seule fois
                     if (!cookiesAccepted) {
                         try {
                             await page.getByRole('button', { name: /Tout accepter/i }).click({ timeout: 2000 });
@@ -2379,14 +2380,11 @@ class PorscheExtractor {
 
                     await page.waitForTimeout(800);
 
-                    // Extraire la description
                     const content = await page.evaluate(() => {
-                        // Chercher dans le sheet qui contient un h2 (avec ou sans image)
                         const sheets = document.querySelectorAll('icc-p-sheet');
                         for (const sheet of sheets) {
                             const h2 = sheet.querySelector('h2');
                             if (h2) {
-                                // Chercher la description
                                 const descDiv = sheet.querySelector('[class*="py-fluid-xs"][class*="prose-text-sm"]')
                                               || sheet.querySelector('[class*="prose-text-sm"][class*="break-words"]');
                                 if (descDiv) {
@@ -2402,19 +2400,15 @@ class PorscheExtractor {
                         descriptions.push({ code, description: content.substring(0, 1000) });
                     }
 
-                    // Log progression
                     if ((i + 1) % 10 === 0 || i === options.length - 1) {
                         console.log(`   ⏳ ${i + 1}/${options.length} (${descriptions.length} descriptions)`);
                     }
 
-                } catch (e) {
-                    // Ignorer les erreurs et continuer
-                }
+                } catch (e) {}
             }
 
             console.log(`   ✓ ${descriptions.length} descriptions extraites`);
 
-            // Mettre à jour la BDD
             if (descriptions.length > 0) {
                 console.log('   💾 Mise à jour en BDD...');
                 let updated = 0;
@@ -2431,10 +2425,13 @@ class PorscheExtractor {
         } finally {
             await page.close();
         }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`   ⏱️ Durée: ${elapsed}s`);
     }
 
     /**
-     * POINT 7: Extraire les noms allemands depuis le configurateur DE
+     * Extraction des noms allemands depuis le configurateur DE
      */
     async fetchGermanNames(modelCode) {
         console.log(`\n🇩🇪 Extraction des noms allemands pour ${modelCode}...`);
@@ -2557,28 +2554,24 @@ async function main() {
     if (args.length === 0) {
         console.log(`
 ╔══════════════════════════════════════════════════════════════════════════╗
-║       PORSCHE OPTIONS EXTRACTOR v6.3 - INFOBULLES                        ║
+║                    PORSCHE OPTIONS EXTRACTOR                             ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 Usage:
-  node porsche_extractor_v6.2.js --init              Initialiser la BDD
-  node porsche_extractor_v6.2.js --model <code>      Extraire un modèle
-  node porsche_extractor_v6.2.js --model <code> --visible  Mode visible
-  node porsche_extractor_v6.2.js --model <code> --debug    Mode debug
-  node porsche_extractor_v6.2.js --model <code> --fetch-de Extraire aussi noms DE
-  node porsche_extractor_v6.2.js --model <code> --fetch-tooltips  Extraire infobulles
+  node porsche_options_extractor.js --init                    Initialiser la BDD
+  node porsche_options_extractor.js --model <code>            Extraire un modèle
+  node porsche_options_extractor.js --model <code> --visible  Mode visible (navigateur)
+  node porsche_options_extractor.js --model <code> --debug    Mode debug
+  node porsche_options_extractor.js --model <code> --fetch-de Extraire noms allemands
+  node porsche_options_extractor.js --model <code> --fetch-tooltips  Extraire descriptions
 
-Corrections v6.2 (retour client):
-  1. ✅ Prix véhicule: extraction précise du prix de base
-  2. ✅ Prix jantes: prix individuels par option
-  3. ✅ Prix teintes INT: prix individuels par option
-  4. ✅ Sièges: modèles de sièges + options
-  5. ✅ Sous-catégories: H3 complets
-  6. ✅ Stats Dashboard: comparaisons, doublons, Exclusive
-  7. ✅ Dictionnaire FR/DE: colonne name_de
-
-Ajouts v6.3:
-  8. ✅ Infobulles: --fetch-tooltips extrait les descriptions
+Options:
+  --init            Créer/réinitialiser la base de données
+  --model <code>    Code modèle Porsche (ex: 982850)
+  --visible         Afficher le navigateur pendant l'extraction
+  --debug           Mode debug avec logs détaillés
+  --fetch-de        Extraire aussi les noms en allemand
+  --fetch-tooltips  Extraire les descriptions des options
 `);
         return;
     }

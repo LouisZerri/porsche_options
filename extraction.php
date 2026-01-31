@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if ($action === 'init_db') {
-            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --init 2>&1', 
+            $cmd = sprintf('cd %s && %s porsche_options_extractor.js --init 2>&1', 
                 escapeshellarg($extractorDir), $nodePath);
             $output = shell_exec($cmd);
             file_put_contents($logFile, "Commande: $cmd\n\n" . $output);
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
             // Mode SYNCHRONE pour voir le résultat directement
             $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
-            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s%s 2>&1',
+            $cmd = sprintf('cd %s && %s porsche_options_extractor.js --model %s%s 2>&1',
                 escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag);
             
             file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
             // Mode ASYNCHRONE (arrière-plan)
             $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
-            $cmd = sprintf('cd %s && %s porsche_extractor_v6.js --model %s%s > %s 2>&1 & echo $!',
+            $cmd = sprintf('cd %s && %s porsche_options_extractor.js --model %s%s > %s 2>&1 & echo $!',
                 escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag, escapeshellarg($logFile));
             $pid = trim(shell_exec($cmd));
             if ($pid && is_numeric($pid)) {
@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Test de diagnostic
             $output = "=== DIAGNOSTIC ===\n\n";
             $output .= "📁 Dossier extracteur: $extractorDir\n";
-            $output .= "📄 Script v6 existe: " . (file_exists($extractorDir . '/porsche_extractor_v6.js') ? '✅ Oui' : '❌ Non') . "\n";
+            $output .= "📄 Script existe: " . (file_exists($extractorDir . '/porsche_options_extractor.js') ? '✅ Oui' : '❌ Non') . "\n";
             $output .= "📦 node_modules existe: " . (is_dir($extractorDir . '/node_modules') ? '✅ Oui' : '❌ Non (faire npm install)') . "\n";
             $output .= "📦 browsers existe: " . (is_dir($extractorDir . '/browsers') ? '✅ Oui' : '❌ Non (faire npm run setup)') . "\n";
             $output .= "🔧 Node.js path: $nodePath\n";
@@ -299,9 +299,9 @@ try {
                     <h3 class="font-bold mb-3">Extraire plusieurs modèles</h3>
                     <form method="POST">
                         <input type="hidden" name="action" value="extract_model">
-                        <input type="text" name="model" required 
+                        <input type="text" name="model" required
                                placeholder="CODE1,CODE2,CODE3"
-                               class="w-full border border-porsche-border rounded px-3 py-2 mb-2 text-sm font-mono uppercase focus:outline-none focus:border-black" 
+                               class="w-full border border-porsche-border rounded px-3 py-2 mb-2 text-sm font-mono uppercase focus:outline-none focus:border-black"
                                <?= $isRunning ? 'disabled' : '' ?>>
                         <p class="text-xs text-gray-500 mb-3">
                             Séparez les codes par des virgules
@@ -339,13 +339,13 @@ try {
                     <p class="text-gray-500 text-xs mb-2">Commandes à exécuter :</p>
                     <div class="bg-gray-900 rounded p-3 font-mono text-xs text-green-400 space-y-1">
                         <p>cd extractor</p>
-                        <p>node porsche_extractor_v6.js --init</p>
-                        <p>node porsche_extractor_v6.js --model 982850</p>
+                        <p>node porsche_options_extractor.js --init</p>
+                        <p>node porsche_options_extractor.js --model 982850</p>
                         <p class="text-gray-500"># Avec infobulles:</p>
-                        <p>node porsche_extractor_v6.js --model 982850 --fetch-tooltips</p>
+                        <p>node porsche_options_extractor.js --model 982850 --fetch-tooltips</p>
                         <p class="text-gray-500"># Avec debug images:</p>
-                        <p>node porsche_extractor_v6.js --model 982850 --debug-img</p>
-                        <p>node porsche_extractor_v6.js --list</p>
+                        <p>node porsche_options_extractor.js --model 982850 --debug-img</p>
+                        <p>node porsche_options_extractor.js --list</p>
                     </div>
                 </div>
 
@@ -419,7 +419,7 @@ try {
                         indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
                         text.textContent = '⏳ Extraction en cours...';
                         isRunning = true;
-                    } else if (data.logs && data.logs.includes('options extraites') || data.logs && data.logs.includes('Extraction terminée')) {
+                    } else if (data.logs && (data.logs.includes('options extraites') || data.logs.includes('Extraction terminée') || data.logs.includes('descriptions extraites') || data.logs.includes('mises à jour'))) {
                         indicator.className = 'w-3 h-3 rounded-full bg-green-500';
                         text.textContent = '✅ Terminé';
                         isRunning = false;
