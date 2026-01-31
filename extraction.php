@@ -289,7 +289,7 @@ try {
                             <span class="text-sm text-gray-700">Extraire les infobulles (descriptions)</span>
                         </label>
                         <button type="submit" class="w-full bg-porsche-red hover:bg-red-700 text-white py-2 rounded transition text-sm" <?= $isRunning ? 'disabled' : '' ?>>
-                            Extraire (~30s)
+                            Extraire
                         </button>
                     </form>
                 </div>
@@ -419,9 +419,13 @@ try {
                         indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
                         text.textContent = '⏳ Extraction en cours...';
                         isRunning = true;
-                    } else {
+                    } else if (data.logs && data.logs.includes('options extraites') || data.logs && data.logs.includes('Extraction terminée')) {
                         indicator.className = 'w-3 h-3 rounded-full bg-green-500';
                         text.textContent = '✅ Terminé';
+                        isRunning = false;
+                    } else {
+                        indicator.className = 'w-3 h-3 rounded-full bg-gray-400';
+                        text.textContent = 'En attente';
                         isRunning = false;
                     }
                 })
