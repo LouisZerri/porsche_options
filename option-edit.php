@@ -1,14 +1,17 @@
 <?php
 
-
 require_once 'config.php';
 
 $db = getDb();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 $message = '';
 $messageType = '';
 
-// Récupérer les modèles pour le select
-$models = $db->query("SELECT id, code, name FROM p_models ORDER BY name")->fetchAll();
+// Récupérer les modèles pour le select (filtré par locale)
+$stmt = $db->prepare("SELECT id, code, name FROM p_models WHERE locale = ? ORDER BY name");
+$stmt->execute([$locale]);
+$models = $stmt->fetchAll();
 
 // Récupérer les catégories existantes
 $categories = $db->query("SELECT DISTINCT name FROM p_categories ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
@@ -93,7 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Rediriger vers la page du modèle si spécifié
         if (isset($_POST['redirect_to_model']) && $_POST['redirect_to_model']) {
-            header("Location: model-detail.php?code=" . urlencode($_POST['redirect_model_code']));
+            $redirectLang = $lang !== 'fr' ? "&lang=$lang" : '';
+            header("Location: model-detail.php?code=" . urlencode($_POST['redirect_model_code']) . $redirectLang);
             exit;
         }
         
@@ -120,7 +124,7 @@ if (isset($_GET['delete']) && isset($_GET['model_id'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -154,14 +158,19 @@ if (isset($_GET['delete']) && isset($_GET['model_id'])) {
                 </div>
             </div>
              <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -170,7 +179,7 @@ if (isset($_GET['delete']) && isset($_GET['model_id'])) {
         <div class="flex items-center justify-between mb-6">
             <h2 class="text-2xl font-bold"><?= $editOption ? '✏️ Modifier' : '➕ Ajouter' ?> une option</h2>
             <?php if (isset($_GET['model_code'])): ?>
-                <a href="model-detail.php?code=<?= htmlspecialchars($_GET['model_code']) ?>" class="text-porsche-red hover:underline">
+                <a href="model-detail.php?code=<?= htmlspecialchars($_GET['model_code']) ?><?= langParamAmp() ?>" class="text-porsche-red hover:underline">
                     ← Retour au modèle
                 </a>
             <?php endif; ?>

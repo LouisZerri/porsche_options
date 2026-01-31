@@ -6,6 +6,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 // Gestion de la suppression d'option
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_option_id'])) {
@@ -46,14 +48,14 @@ $intColors = [];
 $options = [];
 
 try {
-    // Récupérer le modèle
+    // Récupérer le modèle (filtré par locale)
     $stmt = $db->prepare("
         SELECT m.*, f.name as family_name
         FROM p_models m
         LEFT JOIN p_families f ON m.family_id = f.id
-        WHERE m.code = ?
+        WHERE m.code = ? AND m.locale = ?
     ");
-    $stmt->execute([$code]);
+    $stmt->execute([$code, $locale]);
     $model = $stmt->fetch();
 } catch (PDOException $e) {
     // Table n'existe pas
@@ -122,11 +124,11 @@ try {
     
     // Autres options (exclure couleurs, jantes, sièges)
     $stmt = $db->prepare("
-        SELECT o.*, c.name as category_name, c.parent_name
+        SELECT o.*, c.name as category_name, c.sub_category as category_sub, c.display_order as category_order
         FROM p_options o
         LEFT JOIN p_categories c ON o.category_id = c.id
         WHERE o.model_id = ? AND o.option_type NOT IN ('color_ext', 'color_int', 'hood', 'wheel', 'seat')
-        ORDER BY o.display_order ASC, c.parent_name, c.name, o.price DESC
+        ORDER BY c.display_order ASC, o.display_order ASC, o.price DESC
     ");
     $stmt->execute([$model['id']]);
     $options = $stmt->fetchAll();
@@ -136,42 +138,61 @@ try {
     $seats = [];
 }
 
-// Grouper les options par catégorie parent puis sous-catégorie
+// Grouper les options par catégorie (H2) puis sous-catégorie (H3)
+// En conservant l'ordre du configurateur via display_order
 $byParent = [];
+$categoryDisplayOrder = []; // Pour trier les catégories
+$subCategoryDisplayOrder = []; // Pour trier les sous-catégories
+
 foreach ($options as $opt) {
-    $parent = $opt['parent_name'] ?: 'Autre';
-    $cat = $opt['category_name'] ?: 'Autre';
-    
-    if (!isset($byParent[$parent])) {
-        $byParent[$parent] = [];
+    $category = $opt['category_name'] ?: 'Autre';
+    $subCategory = $opt['category_sub'] ?: $opt['sub_category'] ?: 'Général';
+    $displayOrder = $opt['category_order'] ?? 999;
+
+    if (!isset($byParent[$category])) {
+        $byParent[$category] = [];
+        $categoryDisplayOrder[$category] = $displayOrder;
     }
-    if (!isset($byParent[$parent][$cat])) {
-        $byParent[$parent][$cat] = [];
+    if (!isset($byParent[$category][$subCategory])) {
+        $byParent[$category][$subCategory] = [];
+        $subCategoryDisplayOrder[$category][$subCategory] = $displayOrder;
     }
-    $byParent[$parent][$cat][] = $opt;
+    // Garder le plus petit display_order pour la catégorie
+    if ($displayOrder < $categoryDisplayOrder[$category]) {
+        $categoryDisplayOrder[$category] = $displayOrder;
+    }
+    $byParent[$category][$subCategory][] = $opt;
 }
 
-// Ordre des catégories comme sur le configurateur Porsche
-$categoryOrder = [
-    'Couleurs Extérieures' => 1,
-    'Jantes' => 2,
-    'Couleurs Intérieures' => 3,
-    'Sièges' => 4,
-    'Packs' => 5,
-    'Extérieur' => 6,
-    'Intérieur' => 7,
-    'Technologies' => 8,
-    'Accessoires pour véhicules' => 9,
-    'Livraison spéciale' => 10,
-    'Autre' => 99
-];
-
-// Trier les catégories selon l'ordre du configurateur
-uksort($byParent, function($a, $b) use ($categoryOrder) {
-    $orderA = $categoryOrder[$a] ?? 50;
-    $orderB = $categoryOrder[$b] ?? 50;
-    return $orderA - $orderB;
+// Trier les catégories par display_order
+uksort($byParent, function($a, $b) use ($categoryDisplayOrder) {
+    return ($categoryDisplayOrder[$a] ?? 999) - ($categoryDisplayOrder[$b] ?? 999);
 });
+
+// Trier les sous-catégories dans chaque catégorie
+foreach ($byParent as $cat => &$subCats) {
+    uksort($subCats, function($a, $b) use ($subCategoryDisplayOrder, $cat) {
+        return ($subCategoryDisplayOrder[$cat][$a] ?? 999) - ($subCategoryDisplayOrder[$cat][$b] ?? 999);
+    });
+}
+unset($subCats);
+
+// Icônes pour les catégories
+$categoryIcons = [
+    'Packs' => '📦',
+    'Extérieur' => '🚗',
+    'Intérieur' => '🛋️',
+    'Technologies' => '⚙️',
+    'Accessoires pour véhicules' => '🧰',
+    'Livraison spéciale' => '🏭',
+    'Autre' => '📋',
+    // German
+    'Ausstattungspakete' => '📦',
+    'Exterieur' => '🚗',
+    'Interieur' => '🛋️',
+    'Technologie' => '⚙️',
+    'Werksabholung' => '🏭',
+];
 
 // Grouper les jantes par sous-catégorie
 $wheelsBySubCat = [];
@@ -208,7 +229,7 @@ $standardCount = count(array_filter($allItems, fn($o) => $o['is_standard']));
 $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manufaktur'] ?? false));
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -254,14 +275,19 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?code=<?= urlencode($code) ?>&lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?code=<?= urlencode($code) ?>&lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -269,7 +295,7 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
     <main class="max-w-7xl mx-auto px-6 py-8">
         <!-- Breadcrumb -->
         <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
-            <a href="models.php" class="hover:text-black">Modèles</a>
+            <a href="models.php<?= langParam() ?>" class="hover:text-black">Modèles</a>
             <span>›</span>
             <span class="text-black font-medium"><?= htmlspecialchars($model['name']) ?></span>
         </div>
@@ -381,12 +407,6 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
             </div>
         </div>
         <?php endif; ?>
-
-        <!-- Search -->
-        <div class="mb-8">
-            <input type="text" id="searchOptions" placeholder="Rechercher une option, couleur, code..." 
-                   class="w-full border border-porsche-border rounded-lg px-4 py-3 focus:outline-none focus:border-black focus:ring-1 focus:ring-black">
-        </div>
 
         <!-- COULEURS EXTÉRIEURES (incluant Capotes/Toits) -->
         <?php if (!empty($extColors) || !empty($hoods)): ?>
@@ -696,7 +716,7 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
         <div class="border border-porsche-border rounded-lg mb-4 option-section" data-category="<?= htmlspecialchars(strtolower($parentName)) ?>">
             <div class="section-header p-4 flex items-center justify-between cursor-pointer border-b border-porsche-border" 
                  onclick="this.parentElement.classList.toggle('collapsed')">
-                <h3 class="font-bold text-lg"><?= htmlspecialchars($parentName) ?></h3>
+                <h3 class="font-bold text-lg"><?= $categoryIcons[$parentName] ?? '📋' ?> <?= htmlspecialchars($parentName) ?></h3>
                 <div class="flex items-center gap-3">
                     <span class="text-gray-500 text-sm"><?= array_sum(array_map('count', $subCategories)) ?> options</span>
                     <svg class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -706,7 +726,7 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
             </div>
             <div class="section-content">
                 <?php foreach ($subCategories as $subCatName => $categoryOptions): ?>
-                <?php if ($subCatName !== $parentName && count($subCategories) > 1): ?>
+                <?php if ($subCatName !== 'Général' && $subCatName !== $parentName && count($subCategories) > 1): ?>
                 <div class="px-4 py-3 bg-porsche-gray border-b border-porsche-border">
                     <span class="font-medium text-sm"><?= htmlspecialchars($subCatName) ?></span>
                     <span class="text-gray-400 text-sm ml-2">(<?= count($categoryOptions) ?>)</span>
@@ -886,21 +906,6 @@ $exclusiveCount = count(array_filter($allItems, fn($o) => $o['is_exclusive_manuf
             }
         }
         
-        // Recherche
-        document.getElementById('searchOptions').addEventListener('input', function(e) {
-            const search = e.target.value.toLowerCase();
-
-            document.querySelectorAll('.option-row').forEach(row => {
-                const text = row.dataset.search || '';
-                row.style.display = text.includes(search) ? '' : 'none';
-            });
-
-            document.querySelectorAll('.option-section').forEach(section => {
-                const visibleRows = section.querySelectorAll('.option-row:not([style*="display: none"])');
-                section.style.display = visibleRows.length > 0 ? '' : 'none';
-            });
-        });
-
         // Description modal
         function showDescription(code, name, description) {
             const modal = document.getElementById('descriptionModal');

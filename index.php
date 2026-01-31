@@ -5,6 +5,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 // Statistiques
 $stats = ['families' => 0, 'models' => 0, 'options' => 0, 'categories' => 0];
@@ -19,25 +21,30 @@ try {
         'categories' => $db->query("SELECT COUNT(*) FROM p_categories")->fetchColumn() ?: 0,
     ];
 
-    // Modèles par famille
-    $families = $db->query("
-        SELECT f.id, f.code, f.name, COUNT(m.id) as model_count, 
+    // Modèles par famille (filtré par locale)
+    $stmt = $db->prepare("
+        SELECT f.id, f.code, f.name, COUNT(m.id) as model_count,
                SUM(m.options_count + m.colors_ext_count + m.colors_int_count) as total_options
         FROM p_families f
-        LEFT JOIN p_models m ON m.family_id = f.id
+        LEFT JOIN p_models m ON m.family_id = f.id AND m.locale = ?
         GROUP BY f.id
         ORDER BY f.name
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $families = $stmt->fetchAll();
 
-    // Derniers modèles extraits
-    $recentModels = $db->query("
+    // Derniers modèles extraits (filtré par locale)
+    $stmt = $db->prepare("
         SELECT m.*, f.name as family_name,
                (m.options_count + m.colors_ext_count + m.colors_int_count) as total_count
         FROM p_models m
         LEFT JOIN p_families f ON m.family_id = f.id
+        WHERE m.locale = ?
         ORDER BY m.last_updated DESC
         LIMIT 10
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $recentModels = $stmt->fetchAll();
 } catch (PDOException $e) {
     // Tables n'existent pas encore
 }
@@ -45,7 +52,7 @@ try {
 $isRunning = isExtractionRunning();
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -83,14 +90,19 @@ $isRunning = isExtractionRunning();
                 </div>
             </div>
              <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -137,7 +149,7 @@ $isRunning = isExtractionRunning();
                     <?php else: ?>
                         <div>
                             <?php $i = 0; foreach ($families as $family): ?>
-                            <a href="models.php?family=<?= $family['id'] ?>" 
+                            <a href="models.php?family=<?= $family['id'] ?><?= langParamAmp() ?>" 
                                class="flex items-center justify-between py-3 hover:bg-gray-100 transition px-3 rounded <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>">
                                 <div>
                                     <span class="font-medium"><?= htmlspecialchars($family['name']) ?></span>
@@ -162,7 +174,7 @@ $isRunning = isExtractionRunning();
                     <?php else: ?>
                         <div>
                             <?php $i = 0; foreach ($recentModels as $model): ?>
-                            <a href="model-detail.php?code=<?= $model['code'] ?>" 
+                            <a href="model-detail.php?code=<?= $model['code'] ?><?= langParamAmp() ?>" 
                                class="flex items-center justify-between py-3 hover:bg-gray-100 transition px-3 rounded <?= $i % 2 ? 'bg-porsche-gray' : 'bg-white' ?>">
                                 <div>
                                     <span class="font-medium"><?= htmlspecialchars($model['name']) ?></span>

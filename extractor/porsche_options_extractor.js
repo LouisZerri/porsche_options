@@ -24,10 +24,16 @@ const DB_CONFIG = {
     charset: 'utf8mb4',
 };
 
-const CONFIG = {
+let CONFIG = {
     baseUrl: 'https://configurator.porsche.com',
     locale: 'fr-FR',
     timeout: 60000,
+};
+
+// Configuration spécifique par locale
+const LOCALE_SETTINGS = {
+    'fr-FR': { cookieButton: /Tout accepter/i },
+    'de-DE': { cookieButton: /Alle akzeptieren/i },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -75,18 +81,20 @@ class PorscheDB {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_models (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            code VARCHAR(20) UNIQUE NOT NULL, 
-            name VARCHAR(100) NOT NULL, 
-            family_id INT, 
-            base_price DECIMAL(10,2), 
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(20) NOT NULL,
+            locale VARCHAR(5) DEFAULT 'fr-FR',
+            name VARCHAR(100) NOT NULL,
+            family_id INT,
+            base_price DECIMAL(10,2),
             year INT,
             technical_data JSON,
             standard_equipment JSON,
-            options_count INT DEFAULT 0, 
-            colors_ext_count INT DEFAULT 0, 
-            colors_int_count INT DEFAULT 0, 
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+            options_count INT DEFAULT 0,
+            colors_ext_count INT DEFAULT 0,
+            colors_int_count INT DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_model_locale (code, locale),
             FOREIGN KEY (family_id) REFERENCES p_families(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         
@@ -101,22 +109,22 @@ class PorscheDB {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         
         await this.pool.query(`CREATE TABLE IF NOT EXISTS p_options (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            model_id INT NOT NULL, 
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            model_id INT NOT NULL,
             category_id INT,
-            code VARCHAR(20) NOT NULL, 
+            code VARCHAR(20) NOT NULL,
             name VARCHAR(255),
             name_de VARCHAR(255),
             description TEXT,
-            price DECIMAL(10,2), 
+            price DECIMAL(10,2),
             is_standard BOOLEAN DEFAULT FALSE,
             is_exclusive_manufaktur BOOLEAN DEFAULT FALSE,
             option_type ENUM('option', 'color_ext', 'color_int', 'wheel', 'seat', 'pack', 'roof', 'hood') DEFAULT 'option',
             sub_category VARCHAR(150),
             image_url VARCHAR(500),
             display_order INT DEFAULT 0,
-            UNIQUE KEY unique_model_option (model_id, code), 
-            FOREIGN KEY (model_id) REFERENCES p_models(id) ON DELETE CASCADE, 
+            UNIQUE KEY unique_model_option (model_id, code),
+            FOREIGN KEY (model_id) REFERENCES p_models(id) ON DELETE CASCADE,
             FOREIGN KEY (category_id) REFERENCES p_categories(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
         
@@ -152,13 +160,13 @@ class PorscheDB {
     async upsertModel(code, name, family, basePrice, technicalData = null, standardEquipment = null) {
         const familyId = await this.getOrCreateFamily(family, family);
         await this.pool.query(
-            `INSERT INTO p_models (code, name, family_id, base_price, year, technical_data, standard_equipment) 
-             VALUES (?, ?, ?, ?, 2025, ?, ?) 
-             ON DUPLICATE KEY UPDATE name = VALUES(name), family_id = VALUES(family_id), base_price = VALUES(base_price), 
-             technical_data = VALUES(technical_data), standard_equipment = VALUES(standard_equipment)`, 
-            [code, name, familyId, basePrice, JSON.stringify(technicalData), JSON.stringify(standardEquipment)]
+            `INSERT INTO p_models (code, locale, name, family_id, base_price, year, technical_data, standard_equipment)
+             VALUES (?, ?, ?, ?, ?, 2025, ?, ?)
+             ON DUPLICATE KEY UPDATE name = VALUES(name), family_id = VALUES(family_id), base_price = VALUES(base_price),
+             technical_data = VALUES(technical_data), standard_equipment = VALUES(standard_equipment)`,
+            [code, CONFIG.locale, name, familyId, basePrice, JSON.stringify(technicalData), JSON.stringify(standardEquipment)]
         );
-        const [result] = await this.pool.query('SELECT id FROM p_models WHERE code = ?', [code]);
+        const [result] = await this.pool.query('SELECT id FROM p_models WHERE code = ? AND locale = ?', [code, CONFIG.locale]);
         return result[0].id;
     }
     
@@ -230,12 +238,12 @@ class PorscheExtractor {
     }
     
     async init(headless = true) {
-        this.browser = await chromium.launch({ 
-            headless, 
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
+        this.browser = await chromium.launch({
+            headless,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
-        this.context = await this.browser.newContext({ 
-            locale: 'fr-FR', 
+        this.context = await this.browser.newContext({
+            locale: CONFIG.locale,
             viewport: { width: 1920, height: 1080 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         });
@@ -310,9 +318,10 @@ class PorscheExtractor {
                 }
             }
             
-            // Accepter les cookies
+            // Accepter les cookies (selon le locale)
             try {
-                await page.getByRole('button', { name: /Tout accepter/i }).click({ timeout: 5000 });
+                const cookiePattern = LOCALE_SETTINGS[CONFIG.locale]?.cookieButton || /Tout accepter|Alle akzeptieren|Accept all/i;
+                await page.getByRole('button', { name: cookiePattern }).click({ timeout: 5000 });
                 await page.waitForTimeout(1000);
             } catch (e) {}
             
@@ -322,20 +331,21 @@ class PorscheExtractor {
             
             // Chercher le prix de base du véhicule
             const basePrice = await page.evaluate(() => {
-                // Méthode 1: Chercher dans la section "Prix" ou "Prix de base"
+                // Méthode 1: Chercher dans la section "Prix" ou "Prix de base" (FR + DE)
                 const priceLabels = document.querySelectorAll('*');
                 for (const el of priceLabels) {
                     const text = el.textContent?.trim()?.toLowerCase() || '';
-                    // Chercher "Prix" suivi d'un montant, en évitant "Prix Total" et "Prix des options"
-                    if ((text === 'prix' || text.includes('prix de base') || text.startsWith('prix\n')) && 
-                        !text.includes('total') && !text.includes('options')) {
+                    // Chercher "Prix"/"Preis" suivi d'un montant, en évitant "Total" et "Options"
+                    if ((text === 'prix' || text === 'preis' || text.includes('prix de base') || text.includes('grundpreis') || text.startsWith('prix\n') || text.startsWith('preis\n')) &&
+                        !text.includes('total') && !text.includes('gesamt') && !text.includes('options') && !text.includes('optionen')) {
                         // Chercher le prix dans le parent ou les siblings
                         const parent = el.parentElement;
                         if (parent) {
                             const parentText = parent.innerText || '';
-                            const match = parentText.match(/(\d{2,3}(?:[\s\u00a0]\d{3})+[,.]\d{2})\s*€/);
+                            // Support FR (161 000,00 €) et DE (161.000,00 €)
+                            const match = parentText.match(/(\d{2,3}(?:[\s\u00a0.]\d{3})+[,.]\d{2})\s*€/);
                             if (match) {
-                                const price = parseFloat(match[1].replace(/[\s\u00a0]/g, '').replace(',', '.'));
+                                const price = parseFloat(match[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
                                 if (price > 30000 && price < 1000000) {
                                     return price;
                                 }
@@ -348,23 +358,25 @@ class PorscheExtractor {
                 const allText = document.body.innerText;
                 const lines = allText.split('\n');
                 for (const line of lines) {
-                    if (line.toLowerCase().includes('total')) continue;
-                    if (line.toLowerCase().includes('options')) continue;
+                    const lineLower = line.toLowerCase();
+                    if (lineLower.includes('total') || lineLower.includes('gesamt')) continue;
+                    if (lineLower.includes('options') || lineLower.includes('optionen')) continue;
                     
-                    const match = line.match(/(\d{2,3}(?:[\s\u00a0]\d{3})+[,.]\d{2})\s*€/);
+                    // Support FR (161 000,00 €) et DE (161.000,00 €)
+                    const match = line.match(/(\d{2,3}(?:[\s\u00a0.]\d{3})+[,.]\d{2})\s*€/);
                     if (match) {
-                        const price = parseFloat(match[1].replace(/[\s\u00a0]/g, '').replace(',', '.'));
+                        const price = parseFloat(match[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
                         if (price > 50000 && price < 1000000) {
                             return price;
                         }
                     }
                 }
-                
+
                 // Méthode 3: Fallback - premier grand prix
-                const priceRegex = /(\d{1,3}(?:[\s\u00a0]\d{3})*[,.]\d{2})\s*€/g;
+                const priceRegex = /(\d{1,3}(?:[\s\u00a0.]\d{3})*[,.]\d{2})\s*€/g;
                 let match;
                 while ((match = priceRegex.exec(allText)) !== null) {
-                    const price = parseFloat(match[1].replace(/[\s\u00a0]/g, '').replace(',', '.'));
+                    const price = parseFloat(match[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
                     if (price > 50000 && price < 1000000) {
                         return price;
                     }
@@ -383,7 +395,7 @@ class PorscheExtractor {
             
             try {
                 // ÉTAPE 1: Naviguer vers l'onglet DONNÉES TECHNIQUES
-                const techUrl = `https://configurator.porsche.com/fr-FR/mode/model/${modelCode}/specifications?tab=technical-data`;
+                const techUrl = `https://configurator.porsche.com/${CONFIG.locale}/mode/model/${modelCode}/specifications?tab=technical-data`;
                 console.log(`   📍 Navigation vers: ${techUrl}`);
                 await page.goto(techUrl, { waitUntil: 'networkidle', timeout: 30000 });
                 await page.waitForTimeout(3000);
@@ -409,7 +421,7 @@ class PorscheExtractor {
                 Object.entries(technicalData).slice(0, 5).forEach(([k, v]) => console.log(`      • ${k}: ${v}`));
                 
                 // ÉTAPE 2: Naviguer vers l'onglet ÉQUIPEMENTS DE SÉRIE
-                const equipUrl = `https://configurator.porsche.com/fr-FR/mode/model/${modelCode}/specifications?tab=standard-equipment`;
+                const equipUrl = `https://configurator.porsche.com/${CONFIG.locale}/mode/model/${modelCode}/specifications?tab=standard-equipment`;
                 console.log(`   📍 Navigation vers: ${equipUrl}`);
                 await page.goto(equipUrl, { waitUntil: 'networkidle', timeout: 30000 });
                 await page.waitForTimeout(3000);
@@ -488,7 +500,7 @@ class PorscheExtractor {
                 standardEquipment.slice(0, 8).forEach(e => console.log(`      • ${e}`));
                 
                 // Retourner à la page du configurateur
-                await page.goto(`https://configurator.porsche.com/fr-FR/mode/model/${modelCode}`, { waitUntil: 'networkidle', timeout: 30000 });
+                await page.goto(`https://configurator.porsche.com/${CONFIG.locale}/mode/model/${modelCode}`, { waitUntil: 'networkidle', timeout: 30000 });
                 await page.waitForTimeout(2000);
                 
             } catch (e) {
@@ -1075,13 +1087,13 @@ class PorscheExtractor {
                     }
                     if (!section) return;
                     
-                    // Type de base
+                    // Type de base (FR + DE)
                     let baseType = 'option';
-                    if (h2Lower.includes('couleurs extérieure')) baseType = 'color_ext';
-                    else if (h2Lower.includes('couleurs intérieure')) baseType = 'color_int';
-                    else if (h2Lower.includes('jante')) baseType = 'wheel';
-                    else if (h2Lower.includes('siège')) baseType = 'seat';
-                    else if (h2Lower.includes('pack')) baseType = 'pack';
+                    if (h2Lower.includes('couleurs extérieure') || h2Lower.includes('außenfarben')) baseType = 'color_ext';
+                    else if (h2Lower.includes('couleurs intérieure') || h2Lower.includes('innenfarben')) baseType = 'color_int';
+                    else if (h2Lower.includes('jante') || h2Lower.includes('räder')) baseType = 'wheel';
+                    else if (h2Lower.includes('siège') || h2Lower.includes('sitze')) baseType = 'seat';
+                    else if (h2Lower.includes('pack') || h2Lower.includes('paket')) baseType = 'pack';
                     
                     // DEBUG: Log section type
                     if (baseType !== 'option') {
@@ -1157,7 +1169,7 @@ class PorscheExtractor {
                                         if (priceMatch) {
                                             let priceStr = priceMatch[1].replace(/[\s\u00a0]/g, '').replace(/\./g, '').replace(',', '.');
                                             const parsedPrice = parseFloat(priceStr);
-                                            if (parsedPrice > 0 && parsedPrice < 50000) {
+                                            if (parsedPrice >= 0 && parsedPrice < 50000) {
                                                 h3Price = parsedPrice;
                                             }
                                         }
@@ -1176,7 +1188,7 @@ class PorscheExtractor {
                                         if (priceMatch) {
                                             let priceStr = priceMatch[1].replace(/[\s\u00a0]/g, '').replace(/\./g, '').replace(',', '.');
                                             const parsedPrice = parseFloat(priceStr);
-                                            if (parsedPrice > 0 && parsedPrice < 50000) {
+                                            if (parsedPrice >= 0 && parsedPrice < 50000) {
                                                 h3Price = parsedPrice;
                                             }
                                         }
@@ -1239,7 +1251,7 @@ class PorscheExtractor {
                         // Détecter les capotes
                         let type = baseType;
                         const h3Lower = (parentH3 || '').toLowerCase();
-                        if (baseType === 'color_ext' && (h3Lower.includes('capote') || h3Lower.includes('toit') || h3Lower.includes('soft top'))) {
+                        if (baseType === 'color_ext' && (h3Lower.includes('capote') || h3Lower.includes('toit') || h3Lower.includes('soft top') || h3Lower.includes('verdeck') || h3Lower.includes('dach'))) {
                             type = 'hood';
                             debugInfo.point2_hoods.push({ code, name, h3: parentH3 });
                         }
@@ -1268,8 +1280,9 @@ class PorscheExtractor {
                             // Marquer si on trouve "de série" mais continuer à chercher un prix
                             if (!foundSerieText && i <= 3) {
                                 const textLower = elText.toLowerCase();
-                                if (textLower.includes('équipement de série') || 
-                                    textLower.includes('standard equipment')) {
+                                if (textLower.includes('équipement de série') ||
+                                    textLower.includes('standard equipment') ||
+                                    textLower.includes('serienausstattung')) {
                                     foundSerieText = true;
                                     serieLevel = i;
                                 }
@@ -1314,16 +1327,33 @@ class PorscheExtractor {
                             isStandard = true;
                             priceFound = true;
                         }
+
+                        // Étape 2b: Pour les couleurs, vérifier si la sous-catégorie indique "de série"
+                        if (!priceFound && (type === 'color_ext' || type === 'color_int')) {
+                            const h3LowerCheck = (parentH3 || '').toLowerCase();
+                            if (h3LowerCheck.includes('couleur de série') ||
+                                h3LowerCheck.includes('serienfarbe') ||
+                                h3LowerCheck === 'série' ||
+                                h3LowerCheck === 'serie') {
+                                price = 0;
+                                isStandard = true;
+                                priceFound = true;
+                            } else if (h3LowerCheck.includes('couleur spéciale') ||
+                                       h3LowerCheck.includes('sonderfarbe')) {
+                                // Couleur spéciale = payante, mais on ne connaît pas le prix exact ici
+                                isStandard = false;
+                            }
+                        }
                         
-                        // Étape 3: Si pas de prix trouvé pour color_int, utiliser le prix du H3 si disponible
-                        if (!priceFound && type === 'color_int' && h3Price !== null) {
+                        // Étape 3: Si pas de prix trouvé pour couleurs/capotes, utiliser le prix du H3 si disponible
+                        if (!priceFound && (type === 'color_int' || type === 'color_ext' || type === 'hood') && h3Price !== null) {
                             price = h3Price;
                             isStandard = (h3Price === 0);
                             priceFound = true;
                         }
-                        
-                        // Étape 4: Pour color_int sans prix, chercher le prix dans le groupe H3
-                        if (!priceFound && type === 'color_int' && parentH3) {
+
+                        // Étape 4: Pour couleurs/capotes sans prix, chercher le prix dans le groupe H3
+                        if (!priceFound && (type === 'color_int' || type === 'color_ext' || type === 'hood') && parentH3) {
                             // Trouver la section H3 et chercher un prix global
                             let h3El = null;
                             let searchH3 = input;
@@ -1388,10 +1418,11 @@ class PorscheExtractor {
                             isStandard = true;
                         }
                         
-                        // Debug: Log pour les jantes et couleurs intérieures
-                        if (baseType === 'wheel' || baseType === 'color_int') {
-                            debugInfo[`price_debug_${baseType}`] = debugInfo[`price_debug_${baseType}`] || [];
-                            debugInfo[`price_debug_${baseType}`].push({
+                        // Debug: Log pour les jantes, couleurs intérieures et capotes
+                        if (baseType === 'wheel' || baseType === 'color_int' || type === 'hood') {
+                            const debugKey = type === 'hood' ? 'hood' : baseType;
+                            debugInfo[`price_debug_${debugKey}`] = debugInfo[`price_debug_${debugKey}`] || [];
+                            debugInfo[`price_debug_${debugKey}`].push({
                                 code,
                                 name: name.substring(0, 40),
                                 price,
@@ -2559,7 +2590,8 @@ async function main() {
 
 Usage:
   node porsche_options_extractor.js --init                    Initialiser la BDD
-  node porsche_options_extractor.js --model <code>            Extraire un modèle
+  node porsche_options_extractor.js --model <code>            Extraire un modèle (FR par défaut)
+  node porsche_options_extractor.js --model <code> --locale de-DE  Extraire en allemand
   node porsche_options_extractor.js --model <code> --visible  Mode visible (navigateur)
   node porsche_options_extractor.js --model <code> --debug    Mode debug
   node porsche_options_extractor.js --model <code> --fetch-de Extraire noms allemands
@@ -2568,6 +2600,7 @@ Usage:
 Options:
   --init            Créer/réinitialiser la base de données
   --model <code>    Code modèle Porsche (ex: 982850)
+  --locale <code>   Locale pour l'extraction (fr-FR ou de-DE, défaut: fr-FR)
   --visible         Afficher le navigateur pendant l'extraction
   --debug           Mode debug avec logs détaillés
   --fetch-de        Extraire aussi les noms en allemand
@@ -2596,6 +2629,13 @@ Options:
     const debug = args.includes('--debug');
     const fetchDe = args.includes('--fetch-de');
     const fetchTooltips = args.includes('--fetch-tooltips');
+
+    // Gérer le locale
+    const localeIndex = args.indexOf('--locale');
+    if (localeIndex !== -1 && args[localeIndex + 1]) {
+        CONFIG.locale = args[localeIndex + 1];
+    }
+    console.log(`🌐 Locale: ${CONFIG.locale}`);
 
     await db.connect();
 

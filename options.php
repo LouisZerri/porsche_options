@@ -6,6 +6,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 $search = $_GET['q'] ?? '';
 $categoryFilter = $_GET['cat'] ?? '';
@@ -33,17 +35,17 @@ try {
         ORDER BY option_type
     ")->fetchAll(PDO::FETCH_KEY_PAIR);
     
-    // Construire la requête de recherche
+    // Construire la requête de recherche (filtrée par locale)
     $sql = "
-        SELECT o.*, m.name as model_name, m.code as model_code, f.name as family_name, 
+        SELECT o.*, m.name as model_name, m.code as model_code, f.name as family_name,
                c.name as category_name, c.parent_name as parent_category
         FROM p_options o
-        JOIN p_models m ON o.model_id = m.id
+        JOIN p_models m ON o.model_id = m.id AND m.locale = ?
         LEFT JOIN p_families f ON m.family_id = f.id
         LEFT JOIN p_categories c ON o.category_id = c.id
         WHERE 1=1
     ";
-    $params = [];
+    $params = [$locale];
     
     if ($search && strlen($search) >= 2) {
         $sql .= " AND (o.code LIKE ? OR o.name LIKE ?)";
@@ -131,7 +133,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
 });
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -170,12 +172,17 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-black font-medium">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">Extraction</a>
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-black font-medium">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">Extraction</a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -205,9 +212,9 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                     $icon = $typeLabels[$type][0] ?? '⚙️';
                     $label = $typeLabels[$type][1] ?? $type;
                 ?>
-                <a href="?type=<?= urlencode($type) ?>" 
+                <a href="?type=<?= urlencode($type) ?><?= langParamAmp() ?>"
                    class="px-3 py-1.5 rounded text-sm <?= $typeFilter === $type ? 'bg-porsche-red text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
-                    <?= $icon ?> <?= htmlspecialchars($label) ?> 
+                    <?= $icon ?> <?= htmlspecialchars($label) ?>
                     <span class="<?= $typeFilter === $type ? 'text-red-200' : 'text-gray-400' ?>">(<?= $count ?>)</span>
                 </a>
                 <?php endforeach; ?>
@@ -220,13 +227,13 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
         <div class="mb-6">
             <p class="text-sm text-gray-500 mb-2">Filtrer par catégorie :</p>
             <div class="flex flex-wrap gap-2">
-                <a href="options.php" class="px-4 py-2 rounded <?= !$categoryFilter && !$typeFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
+                <a href="options.php<?= langParam() ?>" class="px-4 py-2 rounded <?= !$categoryFilter && !$typeFilter ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
                     Tous
                 </a>
                 <?php foreach ($categories as $cat): ?>
-                <a href="?cat=<?= urlencode($cat['name']) ?>" 
+                <a href="?cat=<?= urlencode($cat['name']) ?><?= langParamAmp() ?>"
                    class="px-4 py-2 rounded <?= $categoryFilter === $cat['name'] ? 'bg-black text-white' : 'border border-porsche-border hover:bg-gray-50' ?> transition">
-                    <?= htmlspecialchars($cat['name']) ?> 
+                    <?= htmlspecialchars($cat['name']) ?>
                     <span class="text-gray-400">(<?= $cat['count'] ?>)</span>
                 </a>
                 <?php endforeach; ?>
@@ -237,6 +244,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
         <!-- Recherche -->
         <form method="GET" class="mb-6">
             <div class="flex gap-4">
+                <input type="hidden" name="lang" value="<?= $lang ?>">
                 <?php if ($categoryFilter): ?>
                 <input type="hidden" name="cat" value="<?= htmlspecialchars($categoryFilter) ?>">
                 <?php endif; ?>
@@ -292,7 +300,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                                 class="info-icon w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-600 ml-2 flex-shrink-0" title="Voir la description">i</button>
                         <?php endif; ?>
                         <span class="flex-1 ml-3 truncate"><?= htmlspecialchars($opt['name']) ?></span>
-                        <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6 flex-shrink-0">
+                        <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?><?= langParamAmp() ?>" class="text-gray-500 hover:text-black hover:underline text-sm mr-6 flex-shrink-0">
                             <?= htmlspecialchars($opt['model_name']) ?>
                         </a>
                         <span class="w-24 text-right flex-shrink-0 <?= $opt['is_standard'] ? 'text-green-600' : 'font-medium' ?>">
@@ -332,7 +340,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                         $count = $typesCounts[$type] ?? 0;
                         if ($count === 0) continue;
                     ?>
-                    <a href="?type=<?= urlencode($type) ?>" 
+                    <a href="?type=<?= urlencode($type) ?><?= langParamAmp() ?>"
                        class="p-4 border border-porsche-border rounded-lg hover:bg-porsche-gray transition">
                         <div class="text-2xl mb-1"><?= $info[0] ?></div>
                         <div class="font-medium"><?= $info[1] ?></div>
@@ -344,7 +352,7 @@ uksort($optionsByCategory, function($a, $b) use ($categoryOrder) {
                 <h3 class="font-bold mb-4">Catégories disponibles</h3>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <?php foreach ($categories as $cat): ?>
-                    <a href="?cat=<?= urlencode($cat['name']) ?>" 
+                    <a href="?cat=<?= urlencode($cat['name']) ?><?= langParamAmp() ?>"
                        class="p-4 border border-porsche-border rounded-lg hover:bg-porsche-gray transition">
                         <div class="font-medium"><?= htmlspecialchars($cat['name']) ?></div>
                         <div class="text-gray-500 text-sm"><?= $cat['count'] ?> options</div>

@@ -5,6 +5,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 // Filtres
 $familyId = $_GET['family'] ?? null;
@@ -17,15 +19,15 @@ try {
     // Familles pour le filtre
     $families = $db->query("SELECT * FROM p_families ORDER BY name")->fetchAll();
 
-    // Construire la requête
+    // Construire la requête (filtrée par locale)
     $sql = "
         SELECT m.*, f.name as family_name,
                (m.options_count + m.colors_ext_count + m.colors_int_count) as total_count
         FROM p_models m
         LEFT JOIN p_families f ON m.family_id = f.id
-        WHERE 1=1
+        WHERE m.locale = ?
     ";
-    $params = [];
+    $params = [$locale];
 
     if ($familyId) {
         $sql .= " AND m.family_id = ?";
@@ -48,7 +50,7 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -86,14 +88,19 @@ try {
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -127,9 +134,10 @@ try {
                     <button type="submit" class="bg-black hover:bg-gray-800 text-white px-6 py-2 rounded transition">
                         Filtrer
                     </button>
-                    <a href="models.php" class="border border-porsche-border hover:bg-gray-50 px-4 py-2 rounded transition">
+                    <a href="models.php<?= langParam() ?>" class="border border-porsche-border hover:bg-gray-50 px-4 py-2 rounded transition">
                         Reset
                     </a>
+                    <input type="hidden" name="lang" value="<?= $lang ?>">
                 </div>
             </div>
         </form>
@@ -145,7 +153,7 @@ try {
         <?php else: ?>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <?php foreach ($models as $model): ?>
-                <a href="model-detail.php?code=<?= urlencode($model['code']) ?>" 
+                <a href="model-detail.php?code=<?= urlencode($model['code']) ?><?= langParamAmp() ?>" 
                    class="border border-porsche-border rounded-lg p-5 hover:shadow-lg hover:border-gray-400 transition group">
                     <div class="flex justify-between items-start mb-3">
                         <div>

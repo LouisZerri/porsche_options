@@ -6,6 +6,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 // Récupérer les modèles pour le filtre
 $models = [];
@@ -15,25 +17,44 @@ $exclusiveOptions = [];
 $priceComparisons = [];
 
 try {
-    $models = $db->query("
-        SELECT m.*, f.name as family_name 
-        FROM p_models m 
-        LEFT JOIN p_families f ON m.family_id = f.id 
+    $stmt = $db->prepare("
+        SELECT m.*, f.name as family_name
+        FROM p_models m
+        LEFT JOIN p_families f ON m.family_id = f.id
+        WHERE m.locale = ?
         ORDER BY f.name, m.name
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $models = $stmt->fetchAll();
     
-    // Statistiques globales
+    // Statistiques globales (filtrées par locale)
+    $stmt = $db->prepare("SELECT COUNT(*) FROM p_options o JOIN p_models m ON o.model_id = m.id WHERE m.locale = ?");
+    $stmt->execute([$locale]);
+    $totalOptions = $stmt->fetchColumn();
+
+    $stmt = $db->prepare("SELECT COUNT(*) FROM p_options o JOIN p_models m ON o.model_id = m.id WHERE m.locale = ? AND o.is_exclusive_manufaktur = 1");
+    $stmt->execute([$locale]);
+    $totalExclusive = $stmt->fetchColumn();
+
+    $stmt = $db->prepare("SELECT COUNT(*) FROM p_options o JOIN p_models m ON o.model_id = m.id WHERE m.locale = ? AND o.is_standard = 1");
+    $stmt->execute([$locale]);
+    $totalStandard = $stmt->fetchColumn();
+
+    $stmt = $db->prepare("SELECT COUNT(DISTINCT o.code) FROM p_options o JOIN p_models m ON o.model_id = m.id WHERE m.locale = ?");
+    $stmt->execute([$locale]);
+    $uniqueCodes = $stmt->fetchColumn();
+
     $stats = [
         'totalModels' => count($models),
-        'totalOptions' => $db->query("SELECT COUNT(*) FROM p_options")->fetchColumn(),
-        'totalExclusive' => $db->query("SELECT COUNT(*) FROM p_options WHERE is_exclusive_manufaktur = 1")->fetchColumn(),
-        'totalStandard' => $db->query("SELECT COUNT(*) FROM p_options WHERE is_standard = 1")->fetchColumn(),
-        'uniqueCodes' => $db->query("SELECT COUNT(DISTINCT code) FROM p_options")->fetchColumn(),
+        'totalOptions' => $totalOptions,
+        'totalExclusive' => $totalExclusive,
+        'totalStandard' => $totalStandard,
+        'uniqueCodes' => $uniqueCodes,
     ];
     
-    // Doublons: codes présents dans plusieurs modèles avec prix différents
-    $duplicates = $db->query("
-        SELECT 
+    // Doublons: codes présents dans plusieurs modèles avec prix différents (filtré par locale)
+    $stmt = $db->prepare("
+        SELECT
             o.code,
             COUNT(DISTINCT o.model_id) as model_count,
             COUNT(DISTINCT o.price) as price_variations,
@@ -43,16 +64,18 @@ try {
             ANY_VALUE(o.name) as option_name
         FROM p_options o
         JOIN p_models m ON o.model_id = m.id
-        WHERE o.price IS NOT NULL AND o.price > 0
+        WHERE o.price IS NOT NULL AND o.price > 0 AND m.locale = ?
         GROUP BY o.code
         HAVING model_count > 1 AND price_variations > 1
         ORDER BY (MAX(o.price) - MIN(o.price)) DESC
         LIMIT 50
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $duplicates = $stmt->fetchAll();
     
-    // Options Exclusive Manufaktur
-    $exclusiveOptions = $db->query("
-        SELECT 
+    // Options Exclusive Manufaktur (filtrée par locale)
+    $stmt = $db->prepare("
+        SELECT
             o.code,
             o.name,
             o.price,
@@ -61,13 +84,15 @@ try {
             m.code as model_code
         FROM p_options o
         JOIN p_models m ON o.model_id = m.id
-        WHERE o.is_exclusive_manufaktur = 1
+        WHERE o.is_exclusive_manufaktur = 1 AND m.locale = ?
         ORDER BY m.name, o.name
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $exclusiveOptions = $stmt->fetchAll();
     
-    // Comparaison des prix de base des véhicules
-    $priceComparisons = $db->query("
-        SELECT 
+    // Comparaison des prix de base des véhicules (filtrée par locale)
+    $stmt = $db->prepare("
+        SELECT
             m.code,
             m.name,
             m.base_price,
@@ -75,9 +100,11 @@ try {
             (SELECT COUNT(*) FROM p_options WHERE model_id = m.id) as options_count
         FROM p_models m
         LEFT JOIN p_families f ON m.family_id = f.id
-        WHERE m.base_price IS NOT NULL
+        WHERE m.base_price IS NOT NULL AND m.locale = ?
         ORDER BY m.base_price DESC
-    ")->fetchAll();
+    ");
+    $stmt->execute([$locale]);
+    $priceComparisons = $stmt->fetchAll();
     
 } catch (PDOException $e) {
     // Tables may not exist
@@ -89,7 +116,7 @@ $codeComparison = [];
 if ($compareCode) {
     try {
         $stmt = $db->prepare("
-            SELECT 
+            SELECT
                 o.code,
                 o.name,
                 o.name_de,
@@ -103,16 +130,16 @@ if ($compareCode) {
                 m.base_price as model_price
             FROM p_options o
             JOIN p_models m ON o.model_id = m.id
-            WHERE o.code = ?
+            WHERE o.code = ? AND m.locale = ?
             ORDER BY o.price DESC
         ");
-        $stmt->execute([$compareCode]);
+        $stmt->execute([$compareCode, $locale]);
         $codeComparison = $stmt->fetchAll();
     } catch (PDOException $e) {}
 }
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -153,14 +180,19 @@ if ($compareCode) {
                 </div>
             </div>
              <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="option-edit.php" class="text-gray-600 hover:text-black transition">+ Option</a>
-                <a href="stats.php" class="text-gray-600 hover:text-black transition">Stats</a>
-                <a href="extraction.php" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="option-edit.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">+ Option</a>
+                <a href="stats.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Stats</a>
+                <a href="extraction.php<?= langParam() ?>" class="bg-porsche-red hover:bg-red-700 text-white px-4 py-2 rounded transition">
                     Extraction
                 </a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -196,7 +228,8 @@ if ($compareCode) {
         <div class="border border-porsche-border rounded-lg p-6 mb-8">
             <h3 class="font-bold text-lg mb-4">🔍 Comparer un code option</h3>
             <form method="GET" class="flex gap-4">
-                <input type="text" name="compare" value="<?= htmlspecialchars($compareCode) ?>" 
+                <input type="hidden" name="lang" value="<?= $lang ?>">
+                <input type="text" name="compare" value="<?= htmlspecialchars($compareCode) ?>"
                        placeholder="Code option (ex: PSM, 9JB, XSC...)"
                        class="flex-1 border border-porsche-border rounded px-4 py-2 focus:outline-none focus:border-black">
                 <button type="submit" class="bg-black text-white px-6 py-2 rounded hover:bg-gray-800 transition">
@@ -224,7 +257,7 @@ if ($compareCode) {
                             <?php foreach ($codeComparison as $item): ?>
                             <tr class="border-b border-porsche-border hover:bg-gray-50">
                                 <td class="px-4 py-2">
-                                    <a href="model-detail.php?code=<?= urlencode($item['model_code']) ?>" class="text-blue-600 hover:underline">
+                                    <a href="model-detail.php?code=<?= urlencode($item['model_code']) ?><?= langParamAmp() ?>" class="text-blue-600 hover:underline">
                                         <?= htmlspecialchars($item['model_name']) ?>
                                     </a>
                                 </td>
@@ -268,7 +301,7 @@ if ($compareCode) {
                         <?php foreach ($priceComparisons as $model): ?>
                         <tr class="border-b border-porsche-border hover:bg-gray-50">
                             <td class="px-4 py-2">
-                                <a href="model-detail.php?code=<?= urlencode($model['code']) ?>" class="text-blue-600 hover:underline">
+                                <a href="model-detail.php?code=<?= urlencode($model['code']) ?><?= langParamAmp() ?>" class="text-blue-600 hover:underline">
                                     <?= htmlspecialchars($model['name']) ?>
                                 </a>
                                 <span class="text-gray-400 text-xs ml-2"><?= htmlspecialchars($model['code']) ?></span>
@@ -315,7 +348,7 @@ if ($compareCode) {
                                 +<?= number_format($dup['max_price'] - $dup['min_price'], 0, ',', ' ') ?> €
                             </td>
                             <td class="px-4 py-2 text-center">
-                                <a href="?compare=<?= urlencode($dup['code']) ?>" class="text-blue-600 hover:underline">Détails</a>
+                                <a href="?compare=<?= urlencode($dup['code']) ?><?= langParamAmp() ?>" class="text-blue-600 hover:underline">Détails</a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -347,7 +380,7 @@ if ($compareCode) {
                             <td class="px-4 py-2 font-mono"><?= htmlspecialchars($opt['code']) ?></td>
                             <td class="px-4 py-2"><?= htmlspecialchars($opt['name'] ?? '-') ?></td>
                             <td class="px-4 py-2">
-                                <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?>" class="text-blue-600 hover:underline">
+                                <a href="model-detail.php?code=<?= urlencode($opt['model_code']) ?><?= langParamAmp() ?>" class="text-blue-600 hover:underline">
                                     <?= htmlspecialchars($opt['model_name']) ?>
                                 </a>
                             </td>

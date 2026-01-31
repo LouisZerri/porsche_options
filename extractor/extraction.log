@@ -1,32 +1,30 @@
-🚀 Lancement: cd '/var/www/html/porsche_extractor_interface/extractor' && /usr/bin/node porsche_options_extractor.js --model '982850' --fetch-tooltips 2>&1
-
+🌐 Locale: fr-FR
 ✅ Connecté à MySQL: localhost
 🔧 Mode: Invisible
-🚗 Modèle(s): 982850
-📝 Extraction infobulles activée
+🚗 Modèle(s): 982890
 
 ══════════════════════════════════════════════════════════════════════
-📦 EXTRACTION: 982850
+📦 EXTRACTION: 982890
 ══════════════════════════════════════════════════════════════════════
 
 ⏳ Chargement...
    ✓ Trouvé avec année 2025
-📋 718 Cayman GT4 RS
+📋 718 Spyder RS
 💰 162 500 €
 
 📊 Extraction des données techniques et équipements de série...
-   📍 Navigation vers: https://configurator.porsche.com/fr-FR/mode/model/982850/specifications?tab=technical-data
-   ✓ 36 données techniques
+   📍 Navigation vers: https://configurator.porsche.com/fr-FR/mode/model/982890/specifications?tab=technical-data
+   ✓ 42 données techniques
       • Puissance (ch): 500 ch
       • Accélération de 0 à 100 km/h: 3,4 s
-      • Vitesse maximale sur circuit: 315 km/h
+      • Vitesse maximale sur circuit: 308 km/h
       • Couple maximum: 450 Nm
       • Nombre de cylindres: 6
-   📍 Navigation vers: https://configurator.porsche.com/fr-FR/mode/model/982850/specifications?tab=standard-equipment
-   ✓ 30 équipements de série
+   📍 Navigation vers: https://configurator.porsche.com/fr-FR/mode/model/982890/specifications?tab=standard-equipment
+   ✓ 31 équipements de série
       • Jantes 718 Cayman GT4 RS 20 pouces en aluminium forgé
       • Jantes peintes en Argent Foncé (finition satinée)
-      • Système de surveillance de la pression des pneus (TPM) avec mode circuit
+      • Système de surveillance de la pression des pneus (TPM)
       • Sièges baquets
       • Version - GT3 RS
       • Moteur 6 cylindres à plat à aspiration naturelle 4,0 litres
@@ -36,10 +34,10 @@
 📜 Déploiement des sections...
 
    [DEBUG] Structure de la page après scroll:
-      H2: 17, H3: 26
-      Inputs options: 55, Links options: 0
-      H2 trouvés: Couleurs Extérieures | Jantes | Couleurs Intérieures | Sièges | Packs | Extérieur | Intérieur | Technologies | Livraison spéciale | 718 Cayman GT4 RS | Couleurs Extérieures et Jantes | Couleurs Intérieures et Sièges | Technologies | Efficience énergétique | Crit'Air | 718 Cayman GT4 RS
-      Premiers prix trouvés: 162 500€, 3 240€, 420€, 180€, 12 708€, 15 948€
+      H2: 17, H3: 28
+      Inputs options: 60, Links options: 0
+      H2 trouvés: Couleurs Extérieures | Jantes | Couleurs Intérieures | Sièges | Packs | Extérieur | Intérieur | Technologies | Livraison spéciale | 718 Spyder RS | Couleurs Extérieures et Jantes | Couleurs Intérieures et Sièges | Technologies | Efficience énergétique | Crit'Air | 718 Spyder RS
+      Premiers prix trouvés: 162 500€, 3 240€, 420€, 180€, 12 066€
    🔓 Ouverture des sections fermées (Accessoires, Livraison)...
       ✓ Ouvert: Accessoires pour véhicules, Livraison spéciale
    📂 Déploiement de toutes les sous-sections...
@@ -48,19 +46,20 @@
       ✅ "Accessoires pour véhicules" → OUVERT
       ✅ "Transport & protection" → OUVERT
       ✅ "Accessoires intérieurs & sièges enf" → OUVERT
+      ✅ "Accessoires audio & communication" → OUVERT
       ✅ "Livraison spéciale" → OUVERT
 
 🔍 Scan des images...
-📋 104 codes mappés
+📋 100 codes mappés
 
 📊 Extraction des options...
 
 🔄 Récupération des prix par clic (5 options)...
    [DEBUG] Sélecteur prix trouvé: {"selector":"fallback","element":"OUTPUT.xs:prose-text-sm xs:whitespace","sample":"162 500,00 €"}
    ✓ 422: Jantes 718 Cayman GT4 RS 20 po => 0€
+   ✓ 53: Intérieur avec de nombreux élé => 0€
    ✓ 51: Intérieur avec de nombreux élé => 0€
-   ✓ 52: Intérieur avec de nombreux élé => 0€
-   ✓ 62: Intérieur Pack Weissach avec d => 0€
+   ✓ 63: Intérieur Pack Weissach et de  => 0€
    ✓ 61: Intérieur Pack Weissach avec d => 0€
 
 ══════════════════════════════════════════════════════════════════════
@@ -75,6 +74,7 @@
    🛞 421: Jantes 718 Cayman GT4 RS 20 pouces en aluminium fo => SÉRIE
    🛞 422: Jantes 718 Cayman GT4 RS 20 pouces en magnésium fo => SÉRIE
    🛞 346: Jantes peintes en Argent => SÉRIE
+   🛞 336: Jantes peintes en aluminium (finition satinée) => 552€
    🛞 XDK: Jantes peintes en Noir (finition satinée) => 552€
    🛞 337: Jantes peintes en Or Blanc métallisé (finition sat => 552€
    🛞 348: Jantes peintes en Néodyme (finition satinée) => 552€
@@ -108,16 +108,16 @@
     "h3Price": null
   },
   {
-    "code": "XDK",
-    "name": "Jantes peintes en Noir (finition satinée",
+    "code": "336",
+    "name": "Jantes peintes en aluminium (finition sa",
     "price": 552,
     "isStandard": false,
     "h3": "Personnalisation des jantes",
     "h3Price": null
   },
   {
-    "code": "337",
-    "name": "Jantes peintes en Or Blanc métallisé (fi",
+    "code": "XDK",
+    "name": "Jantes peintes en Noir (finition satinée",
     "price": 552,
     "isStandard": false,
     "h3": "Personnalisation des jantes",
@@ -127,9 +127,9 @@
 
 📍 Prix couleurs intérieures:
    🛋️ 41: Intérieur avec éléments en cuir et Race-Tex, Noir  => SÉRIE [H3: Race-Tex]
+   🛋️ 53: Intérieur avec de nombreux éléments en cuir et Rac => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
    🛋️ 51: Intérieur avec de nombreux éléments en cuir et Rac => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
-   🛋️ 52: Intérieur avec de nombreux éléments en cuir et Rac => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
-   🛋️ 62: Intérieur Pack Weissach avec de nombreux éléments  => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
+   🛋️ 63: Intérieur Pack Weissach et de nombreux éléments en => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
    🛋️ 61: Intérieur Pack Weissach avec de nombreux éléments  => SÉRIE [H3: Race-Tex avec éléments additionnels en cuir]
    [DEBUG price_debug_color_int]: [
   {
@@ -141,6 +141,14 @@
     "h3Price": null
   },
   {
+    "code": "53",
+    "name": "Intérieur avec de nombreux éléments en c",
+    "price": null,
+    "isStandard": false,
+    "h3": "Race-Tex avec éléments additionnels en cuir",
+    "h3Price": null
+  },
+  {
     "code": "51",
     "name": "Intérieur avec de nombreux éléments en c",
     "price": null,
@@ -149,16 +157,8 @@
     "h3Price": null
   },
   {
-    "code": "52",
-    "name": "Intérieur avec de nombreux éléments en c",
-    "price": null,
-    "isStandard": false,
-    "h3": "Race-Tex avec éléments additionnels en cuir",
-    "h3Price": null
-  },
-  {
-    "code": "62",
-    "name": "Intérieur Pack Weissach avec de nombreux",
+    "code": "63",
+    "name": "Intérieur Pack Weissach et de nombreux é",
     "price": null,
     "isStandard": false,
     "h3": "Race-Tex avec éléments additionnels en cuir",
@@ -176,7 +176,9 @@
 
    [DEBUG] H3 dans section Couleurs Intérieures:
       H3: "Couleur de série" - Prix trouvé: 0,00 €
+      H3: "Couleur métallisée" - Prix trouvé: 3 240,00 €
       H3: "Couleur spéciale" - Prix trouvé: 3 240,00 €
+      H3: "Capote" - Prix trouvé: 0,00 €
       H3: "20 pouces" - Prix trouvé: aucun
       H3: "Personnalisation des jantes" - Prix trouvé: aucun
       H3: "Accessoires de roue" - Prix trouvé: aucun
@@ -201,6 +203,7 @@
       H3: "Audio et communication" - Prix trouvé: aucun
       H3: "Transport & protection" - Prix trouvé: aucun
       H3: "Accessoires intérieurs & sièges enfants" - Prix trouvé: aucun
+      H3: "Accessoires audio & communication" - Prix trouvé: aucun
       H3: "Votre équipement sélectionné" - Prix trouvé: aucun
 
    [DEBUG] Structure HTML couleurs intérieures:
@@ -212,6 +215,14 @@
          Lvl3 <DIV> inputs=1 price=false serie=false => "" | 
          Lvl4 <DIV> inputs=1 price=false serie=false => "" | 
          Lvl5 <DIV> inputs=1 price=false serie=false => "" | 
+      53 (Intérieur avec de nombreux élé):
+         Input attrs: checked=false, disabled=false
+         Lvl0 <DIV> inputs=1 price=false serie=false => "" | 
+         Lvl1 <DIV> inputs=1 price=false serie=false => "" | 
+         Lvl2 <LABEL> inputs=1 price=false serie=false => "" | 
+         Lvl3 <DIV> inputs=1 price=false serie=false => "" | 
+         Lvl4 <DIV> inputs=4 price=false serie=false => "" | 
+         Lvl5 <DIV> inputs=4 price=false serie=false => "" | 
       51 (Intérieur avec de nombreux élé):
          Input attrs: checked=false, disabled=false
          Lvl0 <DIV> inputs=1 price=false serie=false => "" | 
@@ -220,15 +231,7 @@
          Lvl3 <DIV> inputs=1 price=false serie=false => "" | 
          Lvl4 <DIV> inputs=4 price=false serie=false => "" | 
          Lvl5 <DIV> inputs=4 price=false serie=false => "" | 
-      52 (Intérieur avec de nombreux élé):
-         Input attrs: checked=false, disabled=false
-         Lvl0 <DIV> inputs=1 price=false serie=false => "" | 
-         Lvl1 <DIV> inputs=1 price=false serie=false => "" | 
-         Lvl2 <LABEL> inputs=1 price=false serie=false => "" | 
-         Lvl3 <DIV> inputs=1 price=false serie=false => "" | 
-         Lvl4 <DIV> inputs=4 price=false serie=false => "" | 
-         Lvl5 <DIV> inputs=4 price=false serie=false => "" | 
-      62 (Intérieur Pack Weissach avec d):
+      63 (Intérieur Pack Weissach et de ):
          Input attrs: checked=false, disabled=false
          Lvl0 <DIV> inputs=1 price=false serie=false => "" | 
          Lvl1 <DIV> inputs=1 price=false serie=false => "" | 
@@ -258,31 +261,31 @@
       Links (options=): 0
       Links (/option/): 6
          /option/: P11 - 
-            href: /fr-FR/mode/model/982850/option/P11
+            href: /fr-FR/mode/model/982890/option/P11
          /option/: P11 - 
-            href: /fr-FR/mode/model/982850/option/P11
+            href: /fr-FR/mode/model/982890/option/P11
          /option/: P07 - 
-            href: /fr-FR/mode/model/982850/option/P07
+            href: /fr-FR/mode/model/982890/option/P07
          /option/: P07 - 
-            href: /fr-FR/mode/model/982850/option/P07
+            href: /fr-FR/mode/model/982890/option/P07
          /option/: 342 - 
-            href: /fr-FR/mode/model/982850/option/342
+            href: /fr-FR/mode/model/982890/option/342
          /option/: 899 - 
-            href: /fr-FR/mode/model/982850/option/899
+            href: /fr-FR/mode/model/982890/option/899
       H3s: Sièges baquet intégraux | Sièges Sport Plus | Autres options de sièges
 
    [DEBUG] Sièges extraits via /option/:
       💺 P11: Sièges baquets => SÉRIE [H3: Sièges baquet intégraux]
       💺 P07: Sièges Sport Plus adaptatifs (18 positio => SÉRIE [H3: Sièges Sport Plus]
-   Options liées aux sièges (type=option):
-      ⚙️ 579: Ceinture de sécurité à six points pour le siège pa
 
 📍 Sous-catégories:
-   ✓ 26 sous-catégories trouvées:
+   ✓ 29 sous-catégories trouvées:
       • "Couleur de série" (4 options)
+      • "Couleur métallisée" (1 options)
       • "Couleur spéciale" (5 options)
+      • "Capote" (3 options)
       • "20 pouces" (2 options)
-      • "Personnalisation des jantes" (6 options)
+      • "Personnalisation des jantes" (7 options)
       • "Accessoires de roue" (1 options)
       • "Ensembles de roues hiver" (1 options)
       • "Race-Tex" (1 options)
@@ -291,14 +294,14 @@
       • "Sièges baquet intégraux" (1 options)
       • "Sièges Sport Plus" (1 options)
       • "Packs extérieurs" (1 options)
-      • "Design extérieur" (3 options)
-      • "Lettering et stickers extérieurs" (3 options)
-      • "Eclairage et vision" (2 options)
-      ... et 11 autres
+      • "Design extérieur" (5 options)
+      ... et 14 autres
 
    [DEBUG] Tous les H3 trouvés sur la page:
       H3: "Couleur de série"
+      H3: "Couleur métallisée"
       H3: "Couleur spéciale"
+      H3: "Capote"
       H3: "20 pouces"
       H3: "Personnalisation des jantes"
       H3: "Accessoires de roue"
@@ -315,9 +318,7 @@
       H3: "Packs intérieurs et inserts décoratifs"
       H3: "Ceintures de sécurité et personnalisation des sièges"
       H3: "Volant et sélecteur de vitesse"
-      H3: "Design intérieur"
-      H3: "Choix des couleurs cuir / coutures décoratives"
-      ... et 8 autres H3
+      ... et 11 autres H3
 
    [DEBUG] Types de sections détectés:
       color_ext: "Couleurs Extérieures"
@@ -327,10 +328,10 @@
       pack: "Packs"
 
 📍 Statistiques:
-   📊 Total options: 105
-   📊 Codes uniques: 105
-   📊 Exclusive Manufaktur: 34
-   📊 De série: 28
+   📊 Total options: 110
+   📊 Codes uniques: 110
+   📊 Exclusive Manufaktur: 35
+   📊 De série: 35
    📊 Catégories: 10
 
 📍 Dictionnaire DE:
@@ -338,12 +339,13 @@
    ℹ️ Utiliser --locale de-DE pour extraire les noms allemands
 
 📊 RÉSUMÉ PAR TYPE:
-   color_ext: 9 (0 avec prix, 2 de série)
-   wheel: 10 (7 avec prix, 3 de série)
+   color_ext: 10 (6 avec prix, 4 de série)
+   hood: 3 (0 avec prix, 3 de série)
+   wheel: 11 (8 avec prix, 3 de série)
    color_int: 5 (0 avec prix, 5 de série)
    seat: 4 (2 avec prix, 2 de série)
-   pack: 3 (2 avec prix, 1 de série)
-   option: 74 (59 avec prix, 15 de série)
+   pack: 1 (1 avec prix, 0 de série)
+   option: 76 (58 avec prix, 18 de série)
 
 📋 H2 SECTIONS TROUVÉES:
    • Couleurs Extérieures
@@ -355,13 +357,13 @@
    • Intérieur
    • Technologies
    • Livraison spéciale
-   • 718 Cayman GT4 RS
+   • 718 Spyder RS
    • Couleurs Extérieures et Jantes
    • Couleurs Intérieures et Sièges
    • Technologies
    • Efficience énergétique
    • Crit'Air
-   • 718 Cayman GT4 RS
+   • 718 Spyder RS
 
 ══════════════════════════════════════════════════════════════════════
 
@@ -375,13 +377,13 @@
       7. Intérieur
       8. Technologies
       9. Livraison spéciale
-      10. 718 Cayman GT4 RS
+      10. 718 Spyder RS
       11. Couleurs Extérieures et Jantes
       12. Couleurs Intérieures et Sièges
       13. Technologies
       14. Efficience énergétique
       15. Crit'Air
-      16. 718 Cayman GT4 RS
+      16. 718 Spyder RS
 
    📍 DEBUG - Structure HTML:
       Éléments "Exclusive Manufaktur" trouvés:
@@ -407,7 +409,9 @@
             next: "undefined"
       H3s dans Couleurs Intérieures:
          "Couleur de série" [prix: 0,00 €]
+         "Couleur métallisée" [prix: 3 240,00 €]
          "Couleur spéciale" [prix: 3 240,00 €]
+         "Capote" [prix: 0,00 €]
          "20 pouces"
          "Personnalisation des jantes"
          "Accessoires de roue"
@@ -432,41 +436,24 @@
          "Audio et communication"
          "Transport & protection"
          "Accessoires intérieurs & sièges enfants"
+         "Accessoires audio & communication"
          "Votre équipement sélectionné"
 
    ✅ Tous les inputs name="options" ont été extraits
 
-📊 105 éléments extraits
-   🎨 Couleurs ext: 9
+📊 110 éléments extraits
+   🎨 Couleurs ext: 10
    🛋️ Couleurs int: 5
-   🏠 Capotes: 0
-   🛞 Jantes: 10
+   🏠 Capotes: 3
+   🛞 Jantes: 11
    💺 Sièges: 4
-   📦 Packs: 3
-   ⚙️ Options: 74
-   🏷️ Exclusive Manufaktur: 34
-   🖼️ Images: 102
+   📦 Packs: 1
+   ⚙️ Options: 76
+   🏷️ Exclusive Manufaktur: 35
+   🖼️ Images: 100
 
 💾 Sauvegarde...
 
 ══════════════════════════════════════════════════════════════════════
-✅ TERMINÉ: 105 éléments
+✅ TERMINÉ: 110 éléments
 ══════════════════════════════════════════════════════════════════════
-
-📝 Extraction des descriptions pour 982850...
-   📋 105 options à traiter
-   ⏳ 10/105 (1 descriptions)
-   ⏳ 20/105 (10 descriptions)
-   ⏳ 30/105 (20 descriptions)
-   ⏳ 40/105 (28 descriptions)
-   ⏳ 50/105 (38 descriptions)
-   ⏳ 60/105 (46 descriptions)
-   ⏳ 70/105 (53 descriptions)
-   ⏳ 80/105 (61 descriptions)
-   ⏳ 90/105 (68 descriptions)
-   ⏳ 100/105 (77 descriptions)
-   ⏳ 105/105 (82 descriptions)
-   ✓ 82 descriptions extraites
-   💾 Mise à jour en BDD...
-   ✓ 82 options mises à jour
-   ⏱️ Durée: 149.5s

@@ -5,6 +5,8 @@
 require_once 'config.php';
 
 $db = getDB();
+$locale = getCurrentLocale();
+$lang = getLocaleCode();
 
 // Chemins
 $extractorDir = __DIR__ . '/extractor';
@@ -28,10 +30,25 @@ function checkIsRunning($lockFile) {
 // API endpoint pour les logs (AJAX)
 if (isset($_GET['api'])) {
     header('Content-Type: application/json');
-    
+
     if ($_GET['api'] === 'logs') {
         $logs = file_exists($logFile) ? file_get_contents($logFile) : '';
         $running = checkIsRunning($lockFile);
+
+        // Si les logs indiquent que c'est terminé, nettoyer le lock
+        // Mais attention: si les infobulles sont en cours, ne pas arrêter
+        $hasTermine = strpos($logs, 'TERMINÉ') !== false;
+        $hasTooltipStart = strpos($logs, 'Extraction des descriptions') !== false;
+        $hasTooltipEnd = strpos($logs, 'descriptions extraites') !== false && strpos($logs, 'options mises à jour') !== false;
+
+        // C'est vraiment fini si: TERMINÉ sans infobulles OU infobulles terminées
+        $reallyFinished = $hasTermine && (!$hasTooltipStart || $hasTooltipEnd);
+
+        if ($running && $logs && $reallyFinished) {
+            @unlink($lockFile);
+            $running = false;
+        }
+
         echo json_encode([
             'running' => $running,
             'logs' => $logs,
@@ -99,32 +116,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'extract_model' && !empty($_POST['model'])) {
             $model = $_POST['model'];
             $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
-            // Mode SYNCHRONE pour voir le résultat directement
+            $extractLocale = $_POST['extract_locale'] ?? 'fr-FR';
+            // Mode ASYNCHRONE avec logs en temps réel pour la progress bar
             $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
-            $cmd = sprintf('cd %s && %s porsche_options_extractor.js --model %s%s 2>&1',
-                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag);
-            
-            file_put_contents($logFile, "🚀 Lancement: $cmd\n\n");
-            
-            // Exécuter et capturer la sortie
-            $output = shell_exec($cmd);
-            file_put_contents($logFile, $output, FILE_APPEND);
-            
-            $message = "Extraction terminée pour $model";
-            $messageType = "success";
-            
-        } elseif ($action === 'extract_model_async' && !empty($_POST['model'])) {
-            $model = $_POST['model'];
-            $fetchTooltips = isset($_POST['fetch_tooltips']) && $_POST['fetch_tooltips'] === '1';
-            // Mode ASYNCHRONE (arrière-plan)
-            $tooltipFlag = $fetchTooltips ? ' --fetch-tooltips' : '';
-            $cmd = sprintf('cd %s && %s porsche_options_extractor.js --model %s%s > %s 2>&1 & echo $!',
-                escapeshellarg($extractorDir), $nodePath, escapeshellarg($model), $tooltipFlag, escapeshellarg($logFile));
+            $localeFlag = " --locale " . escapeshellarg($extractLocale);
+
+            // Vider le log
+            file_put_contents($logFile, "");
+
+            // Vérifier si stdbuf est disponible pour les logs temps réel
+            $stdbuf = trim(shell_exec('which stdbuf 2>/dev/null') ?: '');
+            $stdbufPrefix = $stdbuf ? 'stdbuf -oL ' : '';
+
+            // Lancer en arrière-plan
+            $cmd = sprintf('cd %s && %s%s porsche_options_extractor.js --model %s%s%s >> %s 2>&1 & echo $!',
+                escapeshellarg($extractorDir), $stdbufPrefix, $nodePath, escapeshellarg($model), $localeFlag, $tooltipFlag, escapeshellarg($logFile));
             $pid = trim(shell_exec($cmd));
+
             if ($pid && is_numeric($pid)) {
                 file_put_contents($lockFile, $pid);
                 $isRunning = true;
-                $message = "Extraction lancée en arrière-plan (PID: $pid)";
+                $message = "Extraction lancée pour $model ($extractLocale)";
                 $messageType = "success";
             } else {
                 file_put_contents($logFile, "Erreur lancement commande:\n$cmd\n\nPID retourné: $pid");
@@ -140,7 +152,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->exec("TRUNCATE TABLE p_categories");
                 $db->exec("TRUNCATE TABLE p_families");
                 $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+                // Vider aussi les logs et le lock
                 file_put_contents($logFile, "🗑️ Toutes les données ont été supprimées.\n");
+                @unlink($lockFile);
                 $message = "Données supprimées";
                 $messageType = "success";
             } catch (Exception $e) {
@@ -183,7 +197,7 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="<?= $lang ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -221,10 +235,15 @@ try {
                 </div>
             </div>
             <nav class="flex items-center gap-6 text-sm">
-                <a href="index.php" class="text-gray-600 hover:text-black transition">Dashboard</a>
-                <a href="models.php" class="text-gray-600 hover:text-black transition">Modèles</a>
-                <a href="options.php" class="text-gray-600 hover:text-black transition">Options</a>
-                <a href="extraction.php" class="text-black font-medium">Extraction</a>
+                <a href="index.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Dashboard</a>
+                <a href="models.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Modèles</a>
+                <a href="options.php<?= langParam() ?>" class="text-gray-600 hover:text-black transition">Options</a>
+                <a href="extraction.php<?= langParam() ?>" class="text-black font-medium">Extraction</a>
+                <!-- Sélecteur de langue -->
+                <div class="flex items-center gap-1 ml-4 border-l border-gray-300 pl-4">
+                    <a href="?lang=fr" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'fr' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">FR</a>
+                    <a href="?lang=de" class="px-2 py-1 rounded text-xs font-bold <?= $lang === 'de' ? 'bg-black text-white' : 'text-gray-500 hover:text-black' ?>">DE</a>
+                </div>
             </nav>
         </div>
     </header>
@@ -238,13 +257,30 @@ try {
         <?php endif; ?>
 
         <!-- Status Bar -->
-        <div id="statusBar" class="mb-6 p-4 rounded-lg border border-porsche-border bg-porsche-gray flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <div id="statusIndicator" class="w-3 h-3 rounded-full <?= $isRunning ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400' ?>"></div>
-                <span id="statusText"><?= $isRunning ? 'Extraction en cours...' : 'En attente' ?></span>
+        <div id="statusBar" class="mb-6 p-4 rounded-lg border border-porsche-border bg-porsche-gray">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-4">
+                    <div id="statusIndicator" class="w-3 h-3 rounded-full <?= $isRunning ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400' ?>"></div>
+                    <span id="statusText"><?= $isRunning ? 'Extraction en cours...' : 'En attente' ?></span>
+                </div>
+                <div id="statsDisplay" class="text-sm text-gray-500">
+                    Chargement...
+                </div>
             </div>
-            <div id="statsDisplay" class="text-sm text-gray-500">
-                Chargement...
+            <!-- Progress Bar -->
+            <div id="progressContainer" class="hidden">
+                <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span id="progressStep">Initialisation...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-gray-300 rounded-full h-3 overflow-hidden">
+                    <div id="progressBar" class="bg-porsche-red h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Début</span>
+                    <span id="progressDetails" class="text-gray-500"></span>
+                    <span>Fin</span>
+                </div>
             </div>
         </div>
 
@@ -273,15 +309,33 @@ try {
                     <h3 class="font-bold mb-3">Extraire un modèle</h3>
                     <form method="POST">
                         <input type="hidden" name="action" value="extract_model">
-                        <input type="text" name="model" required 
+                        <input type="text" name="model" required
                                placeholder="Code modèle (ex: 982850)"
                                pattern="[A-Za-z0-9]+"
-                               class="w-full border border-porsche-border rounded px-3 py-2 mb-2 text-sm font-mono uppercase focus:outline-none focus:border-black" 
+                               class="w-full border border-porsche-border rounded px-3 py-2 mb-2 text-sm font-mono uppercase focus:outline-none focus:border-black"
                                <?= $isRunning ? 'disabled' : '' ?>>
                         <p class="text-xs text-gray-500 mb-3">
                             Trouvez le code dans l'URL du configurateur Porsche<br>
                             Ex: configurator.porsche.com/.../model/<strong>982850</strong>
                         </p>
+                        <!-- Sélecteur de langue d'extraction -->
+                        <div class="mb-3">
+                            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">Langue d'extraction</label>
+                            <div class="flex gap-2">
+                                <label class="flex-1 cursor-pointer">
+                                    <input type="radio" name="extract_locale" value="fr-FR" checked class="sr-only peer" <?= $isRunning ? 'disabled' : '' ?>>
+                                    <div class="text-center py-2 px-3 border border-porsche-border rounded peer-checked:bg-black peer-checked:text-white peer-checked:border-black transition text-sm">
+                                        🇫🇷 Français
+                                    </div>
+                                </label>
+                                <label class="flex-1 cursor-pointer">
+                                    <input type="radio" name="extract_locale" value="de-DE" class="sr-only peer" <?= $isRunning ? 'disabled' : '' ?>>
+                                    <div class="text-center py-2 px-3 border border-porsche-border rounded peer-checked:bg-black peer-checked:text-white peer-checked:border-black transition text-sm">
+                                        🇩🇪 Allemand
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
                         <label class="flex items-center gap-2 mb-3 cursor-pointer">
                             <input type="checkbox" name="fetch_tooltips" value="1"
                                    class="w-4 h-4 accent-porsche-red rounded border-porsche-border"
@@ -306,6 +360,23 @@ try {
                         <p class="text-xs text-gray-500 mb-3">
                             Séparez les codes par des virgules
                         </p>
+                        <!-- Sélecteur de langue d'extraction -->
+                        <div class="mb-3">
+                            <div class="flex gap-2">
+                                <label class="flex-1 cursor-pointer">
+                                    <input type="radio" name="extract_locale" value="fr-FR" checked class="sr-only peer" <?= $isRunning ? 'disabled' : '' ?>>
+                                    <div class="text-center py-2 px-3 border border-porsche-border rounded peer-checked:bg-black peer-checked:text-white peer-checked:border-black transition text-sm">
+                                        🇫🇷 FR
+                                    </div>
+                                </label>
+                                <label class="flex-1 cursor-pointer">
+                                    <input type="radio" name="extract_locale" value="de-DE" class="sr-only peer" <?= $isRunning ? 'disabled' : '' ?>>
+                                    <div class="text-center py-2 px-3 border border-porsche-border rounded peer-checked:bg-black peer-checked:text-white peer-checked:border-black transition text-sm">
+                                        🇩🇪 DE
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
                         <button type="submit" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded transition text-sm" <?= $isRunning ? 'disabled' : '' ?>>
                             Extraire tous
                         </button>
@@ -340,12 +411,12 @@ try {
                     <div class="bg-gray-900 rounded p-3 font-mono text-xs text-green-400 space-y-1">
                         <p>cd extractor</p>
                         <p>node porsche_options_extractor.js --init</p>
+                        <p class="text-gray-500"># Extraction FR (défaut):</p>
                         <p>node porsche_options_extractor.js --model 982850</p>
+                        <p class="text-gray-500"># Extraction DE:</p>
+                        <p>node porsche_options_extractor.js --model 982850 --locale de-DE</p>
                         <p class="text-gray-500"># Avec infobulles:</p>
                         <p>node porsche_options_extractor.js --model 982850 --fetch-tooltips</p>
-                        <p class="text-gray-500"># Avec debug images:</p>
-                        <p>node porsche_options_extractor.js --model 982850 --debug-img</p>
-                        <p>node porsche_options_extractor.js --list</p>
                     </div>
                 </div>
 
@@ -387,13 +458,134 @@ try {
     </main>
 
     <footer class="border-t border-porsche-border mt-12 py-6 text-center text-gray-400 text-sm">
-        Porsche Options Manager v6.0 - Complete Overhaul
+        Porsche Options Manager v6.4 - Progress Bar
     </footer>
 
     <script>
         let isRunning = <?= $isRunning ? 'true' : 'false' ?>;
         let lastLogLength = 0;
-        
+
+        // Étapes de progression avec leurs mots-clés et pourcentages
+        const progressSteps = [
+            { keyword: 'Lancement:', percent: 5, step: 'Lancement de l\'extraction...' },
+            { keyword: 'Chargement...', percent: 8, step: 'Chargement du configurateur...' },
+            { keyword: 'Trouvé avec année', percent: 12, step: 'Modèle trouvé' },
+            { keyword: 'données techniques', percent: 20, step: 'Extraction des données techniques...' },
+            { keyword: 'équipements de série', percent: 28, step: 'Extraction des équipements de série...' },
+            { keyword: 'Déploiement des sections', percent: 35, step: 'Déploiement des sections...' },
+            { keyword: 'Scan des images', percent: 42, step: 'Scan des images...' },
+            { keyword: 'Extraction des options', percent: 50, step: 'Extraction des options...' },
+            { keyword: 'Récupération des prix par clic', percent: 55, step: 'Récupération des prix...' },
+            { keyword: 'DEBUG - Vérification', percent: 58, step: 'Vérification de l\'extraction...' },
+            { keyword: 'RÉSUMÉ PAR TYPE', percent: 62, step: 'Génération du résumé...' },
+            { keyword: 'Sauvegarde...', percent: 65, step: 'Sauvegarde en base de données...' },
+            { keyword: 'TERMINÉ:', percent: 68, step: 'Options extraites...' },
+            // Étapes infobulles (si activées)
+            { keyword: 'Extraction des descriptions', percent: 70, step: 'Extraction des infobulles...' },
+            { keyword: 'descriptions extraites', percent: 95, step: 'Infobulles extraites...' },
+            { keyword: 'options mises à jour', percent: 100, step: 'Extraction terminée !' }
+        ];
+
+        // Analyser les logs pour déterminer la progression
+        function parseProgress(logs) {
+            if (!logs || logs.length === 0) {
+                return { percent: 0, step: 'En attente...', details: '' };
+            }
+
+            let currentPercent = 0;
+            let currentStep = 'Initialisation...';
+            let details = '';
+
+            // Vérifier si vraiment terminé (prioritaire)
+            const hasTermine = logs.includes('TERMINÉ');
+            const hasTooltipStart = logs.includes('Extraction des descriptions');
+            const hasTooltipEnd = logs.includes('options mises à jour');
+
+            if (hasTermine && (!hasTooltipStart || hasTooltipEnd)) {
+                return { percent: 100, step: 'Extraction terminée !', details: '' };
+            }
+
+            // Trouver l'étape la plus avancée
+            for (const step of progressSteps) {
+                if (logs.includes(step.keyword)) {
+                    currentPercent = step.percent;
+                    currentStep = step.step;
+                }
+            }
+
+            // Extraire des détails supplémentaires
+            const modelMatch = logs.match(/📋 ([^\n]+)/);
+            if (modelMatch) {
+                details = modelMatch[1];
+            }
+
+            // Compter les options extraites
+            const optionsMatch = logs.match(/📊 (\d+) éléments extraits/);
+            if (optionsMatch) {
+                details = `${optionsMatch[1]} éléments extraits`;
+            }
+
+            // Extraction en cours - compter les lignes de progression
+            if (currentPercent >= 50 && currentPercent < 68) {
+                const inputsMatch = logs.match(/Inputs options: (\d+)/);
+                if (inputsMatch) {
+                    details = `${inputsMatch[1]} options détectées`;
+                }
+            }
+
+            // Progression des infobulles (⏳ 50/105 (10 descriptions))
+            const tooltipMatch = logs.match(/⏳ (\d+)\/(\d+) \((\d+) descriptions?\)/g);
+            if (tooltipMatch) {
+                const lastMatch = tooltipMatch[tooltipMatch.length - 1];
+                const nums = lastMatch.match(/(\d+)\/(\d+) \((\d+)/);
+                if (nums) {
+                    const current = parseInt(nums[1]);
+                    const total = parseInt(nums[2]);
+                    const found = parseInt(nums[3]);
+                    details = `${current}/${total} options (${found} descriptions)`;
+                    // Calculer le pourcentage entre 70% et 95%
+                    if (current > 0 && total > 0) {
+                        const tooltipProgress = (current / total) * 25; // 25% de plage (70-95)
+                        currentPercent = Math.round(70 + tooltipProgress); // Arrondi
+                        currentStep = `Extraction des infobulles... (${Math.round(current/total*100)}%)`;
+                    }
+                }
+            }
+
+            // Arrondir le pourcentage final
+            currentPercent = Math.round(currentPercent);
+
+            return { percent: currentPercent, step: currentStep, details: details };
+        }
+
+        // Mettre à jour l'affichage de la progression
+        function updateProgressBar(percent, step, details) {
+            const container = document.getElementById('progressContainer');
+            const bar = document.getElementById('progressBar');
+            const stepEl = document.getElementById('progressStep');
+            const percentEl = document.getElementById('progressPercent');
+            const detailsEl = document.getElementById('progressDetails');
+
+            if (percent > 0) {
+                container.classList.remove('hidden');
+                bar.style.width = percent + '%';
+                stepEl.textContent = step;
+                percentEl.textContent = percent + '%';
+                detailsEl.textContent = details;
+
+                // Couleur selon l'état
+                if (percent === 100) {
+                    bar.classList.remove('bg-porsche-red');
+                    bar.classList.add('bg-green-500');
+                } else {
+                    bar.classList.remove('bg-green-500');
+                    bar.classList.add('bg-porsche-red');
+                }
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
         // Polling des logs
         function fetchLogs() {
             fetch('?api=logs')
@@ -409,17 +601,27 @@ try {
                             console.scrollTop = console.scrollHeight;
                             lastLogLength = data.logs.length;
                         }
+
+                        // Mettre à jour la barre de progression
+                        const progress = parseProgress(data.logs);
+                        updateProgressBar(progress.percent, progress.step, progress.details);
                     }
-                    
+
                     // Mettre à jour le statut
                     const indicator = document.getElementById('statusIndicator');
                     const text = document.getElementById('statusText');
-                    
+
+                    // Détecter si vraiment terminé (TERMINÉ sans infobulles OU infobulles terminées)
+                    const hasTermine = data.logs && data.logs.includes('TERMINÉ');
+                    const hasTooltipStart = data.logs && data.logs.includes('Extraction des descriptions');
+                    const hasTooltipEnd = data.logs && data.logs.includes('options mises à jour');
+                    const reallyFinished = hasTermine && (!hasTooltipStart || hasTooltipEnd);
+
                     if (data.running) {
                         indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
                         text.textContent = '⏳ Extraction en cours...';
                         isRunning = true;
-                    } else if (data.logs && (data.logs.includes('options extraites') || data.logs.includes('Extraction terminée') || data.logs.includes('descriptions extraites') || data.logs.includes('mises à jour'))) {
+                    } else if (reallyFinished) {
                         indicator.className = 'w-3 h-3 rounded-full bg-green-500';
                         text.textContent = '✅ Terminé';
                         isRunning = false;
@@ -443,15 +645,22 @@ try {
                 .catch(err => {});
         }
         
-        // Polling
+        // Polling - plus rapide pour une meilleure réactivité
         setInterval(() => {
             fetchLogs();
             fetchStats();
-        }, 2000);
-        
-        // Initial fetch
+        }, 1000);
+
+        // Initial fetch + affichage progression si logs existants
         fetchLogs();
         fetchStats();
+
+        // Afficher la progression initiale si des logs existent
+        const initialLogs = document.getElementById('logContent').textContent;
+        if (initialLogs && initialLogs.length > 50) {
+            const progress = parseProgress(initialLogs);
+            updateProgressBar(progress.percent, progress.step, progress.details);
+        }
     </script>
 </body>
 </html>
